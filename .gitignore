@@ -1,0 +1,27 @@
+# Binaries (anchored so they don't match the cmd/rota, proto/rota, gen/rota dirs)
+/bin/
+/dist/
+/rota
+*.exe
+*.test
+*.out
+
+# Data dirs (Pebble segments, Raft logs, snapshots)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Generated protobuf (regenerated via buf; comment out if you commit generated code)
+# *.pb.go
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,496 @@
+syntax = "proto3";
+
+// Package rota.v1 is the ONE schema for Rota: it defines both the gRPC wire
+// contract and (reused) the durable value types stored in Pebble. Everything
+// here is strictly domain-neutral. Rota's whole vocabulary is Lane, Group,
+// Message, Lease, Policy, Consumer, Cron, Singleton, DeadLetter. It does not
+// know what a "run", "model", or "tenant" is; those ride opaquely in `payload`
+// bytes and the `headers` map.
+package rota.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/tinkerhaus/rota/gen/rota/v1;rotav1";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Services
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Broker is the data plane: publishing work and the bidirectional Work stream
+// over which consumers lease, ack/nack, extend, and complete messages.
+service Broker {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
+  // Work is a long-lived bidirectional stream. The client advertises demand
+  // (credit) and acks/nacks; the server pushes leases and flow-control frames.
+  rpc Work(stream WorkClientMsg) returns (stream WorkServerMsg);
+}
+
+// Control is the control plane: group config + lifecycle, programmable policy
+// management, cron, singleton leases, off-stream completion, and introspection.
+service Control {
+  // Group configuration.
+  rpc SetGroupConfig(SetGroupConfigRequest) returns (GroupConfig);
+  rpc GetGroupConfig(GroupRef) returns (GroupConfig);
+
+  // Group lifecycle. Operating on an absent group is a benign no-op.
+  rpc PauseGroup(GroupRef) returns (GroupConfig);
+  rpc ResumeGroup(GroupRef) returns (GroupConfig);
+  rpc CancelGroup(GroupRef) returns (GroupOpResult);   // drop READY/DELAYED, drain in-flight
+  rpc PurgeGroup(GroupRef) returns (GroupOpResult);     // drop everything leasable, keep config
+  rpc ReapGroup(GroupRef) returns (GroupOpResult);      // idle-reap (asserts empty)
+  rpc TeardownGroup(TeardownRequest) returns (TeardownResult); // one call across ALL lanes
+
+  // Programmable policy (hot-reloadable).
+  rpc SetPolicy(SetPolicyRequest) returns (PolicyInfo);
+  rpc GetPolicy(LaneRef) returns (PolicyInfo);
+  rpc ValidatePolicy(SetPolicyRequest) returns (ValidatePolicyResult); // compile + dry-run, no install
+
+  // Cron (generic recurring publish).
+  rpc ScheduleCron(ScheduleCronRequest) returns (CronInfo); // idempotent on cron_id
+  rpc ListCron(ListCronRequest) returns (ListCronResponse);
+  rpc DeleteCron(CronRef) returns (CronOpResult);
+  rpc PauseCron(CronRef) returns (CronInfo);
+
+  // Singleton leases (generic cluster-wide single-instance coordination).
+  rpc AcquireSingletonLease(AcquireSingletonRequest) returns (SingletonLease);
+  rpc RenewSingletonLease(RenewSingletonRequest) returns (SingletonLease);
+  rpc ReleaseSingletonLease(ReleaseSingletonRequest) returns (SingletonOpResult);
+
+  // Async completion off-stream (twin of the in-stream Complete frame).
+  rpc CompleteByToken(CompleteByTokenRequest) returns (CompleteResult);
+
+  // Introspection.
+  rpc GetStats(GetStatsRequest) returns (StatsResponse);
+  rpc DescribeCluster(DescribeClusterRequest) returns (ClusterInfo);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core domain value types (reused on the wire AND on disk in Pebble)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum MessageState {
+  MESSAGE_STATE_UNSPECIFIED = 0;
+  READY = 1;     // leasable now
+  DELAYED = 2;   // not_before in the future
+  LEASED = 3;    // exclusively granted to a consumer until a deadline
+  DEAD = 4;      // dead-lettered
+  DONE = 5;      // acked / completed, pending delete
+}
+
+// Message is the unit of work. Tiny (ids + flags, KB-scale); bulk content lives
+// in the consumer's own store, referenced by id inside `payload`/`headers`.
+message Message {
+  uint64 msg_id = 1;                    // per-group monotonic seq, leader-assigned in Apply
+  string lane = 2;
+  string group_id = 3;                  // "" is the default group
+  bytes payload = 4;                    // opaque
+  map<string, string> headers = 5;      // app metadata; surfaced on delivery, carried into DLQ
+  uint64 not_before_ms = 6;             // delayed publish: not leasable until T (unix ms)
+  uint64 ttl_ms = 7;                    // 0 = none; else auto-drop/DLQ if undelivered by then
+  uint32 attempt = 8;                   // BROKER-OWNED; publishers cannot set it
+  uint32 max_attempts = 9;             // 0 = lane default
+  uint64 enqueue_ms = 10;               // broker-set
+  MessageState state = 11;
+  uint32 epoch = 12;                    // bumped on every state change; idempotency linchpin
+  uint64 cur_lease = 13;                // lease id while LEASED
+}
+
+// GroupMeta holds BOTH the live knobs and the fairness counters, quorum-written
+// in the same store as messages (this is what kills "redis flush loses weights").
+message GroupMeta {
+  string lane = 1;
+  string group_id = 2;
+  double weight = 3;                    // scheduling FREQUENCY (turns/cycle); default 1.0; <=0 => paused
+  uint32 batch_size = 4;                // messages leased per turn; default 1
+  bool paused = 5;
+  double deficit = 6;                   // DRR deficit (broker-maintained)
+  double virtual_time = 7;             // WFQ virtual finish time (broker-maintained)
+  uint64 ready_count = 8;
+  uint64 inflight_count = 9;
+  uint64 total_count = 10;
+  uint64 next_seq = 11;
+  int64 last_served_seq = 12;
+  int64 last_served_ts = 13;
+  uint64 last_activity_ms = 14;
+}
+
+// Lease is a time-bounded exclusive grant (SQS-style visibility timeout).
+message Lease {
+  uint64 lease_id = 1;
+  uint64 msg_id = 2;
+  string lane = 3;
+  string group_id = 4;
+  string consumer_id = 5;
+  uint64 deadline_ms = 6;              // visibility expiry; mirrored as a LEASE_DEADLINE timer
+  uint32 attempt_at_lease = 7;
+  uint32 epoch = 8;                    // must match Message.epoch; stale ops are benign no-ops
+  uint32 extend_count = 9;
+  bytes completion_token_hash = 10;    // set => complete-by-token mode (sha256 of minted token)
+  uint64 granted_ms = 11;
+}
+
+message DeadLetter {
+  Message original = 1;
+  uint32 final_attempt = 2;
+  string reason = 3;                    // "max_attempts" | "terminal_nack" | "ttl" | "max_lease_lifetime"
+  map<string, string> failure_headers = 4;
+  uint64 dead_at_ms = 5;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Publish
+// ─────────────────────────────────────────────────────────────────────────────
+
+// MessageSpec is what a publisher submits. `not_before` expresses the single
+// "becomes eligible at" instant in either spelling: a relative `delay` or an
+// absolute `at`. Setting neither = eligible now. Setting both is an error.
+message MessageSpec {
+  string lane = 1;
+  string group_id = 2;                  // required
+  bytes payload = 3;
+  map<string, string> headers = 4;
+
+  oneof not_before {
+    google.protobuf.Duration delay = 5;        // relative
+    google.protobuf.Timestamp at = 6;          // absolute (canonical instant)
+  }
+
+  uint32 max_attempts = 7;             // 0 = lane default
+  RetryBackoff retry_backoff = 8;       // optional override
+  google.protobuf.Duration ttl = 9;
+
+  // Live group-knob hints: upsert the group's config so a brand-new group's
+  // first message can carry its fairness weight without a second round-trip.
+  // Authoritative config is SetGroupConfig.
+  optional double weight = 10;
+  optional uint32 batch_size = 11;
+
+  string dedup_key = 12;                // producer-side idempotency window (optional)
+  bool issue_token = 13;                // mint a completion token at lease time
+  bytes external_token = 14;            // or supply your own external completion token
+}
+
+message RetryBackoff {
+  google.protobuf.Duration base = 1;
+  double multiplier = 2;                // e.g. 2.0
+  google.protobuf.Duration max = 3;
+}
+
+message PublishRequest { MessageSpec message = 1; }
+message PublishResponse { uint64 message_id = 1; }
+
+message PublishBatchRequest {
+  repeated MessageSpec messages = 1;
+  bool atomic = 2;                      // true => one Raft write, all-or-nothing
+}
+message PublishBatchResponse {
+  repeated PublishItemResult results = 1;
+}
+message PublishItemResult {
+  uint64 message_id = 1;
+  ErrorCode code = 2;                   // OK unless atomic=false partial failure
+  string detail = 3;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Work stream
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NackMode {
+  // No-penalty requeue: attempt unchanged, optional redelivery delay. For
+  // transient back-pressure (shutdown, rate-limit, circuit-open, paused race).
+  REQUEUE_NO_PENALTY = 0;
+  RETRY = 1;          // attempt++; auto-dead-letter once attempt >= max
+  DEAD_LETTER = 2;    // terminal
+}
+
+enum Outcome {
+  SUCCESS = 0;        // == Ack
+  FAILURE = 1;        // == RETRY-or-DEAD_LETTER per lane
+}
+
+message WorkClientMsg {
+  oneof msg {
+    LeaseRequest lease_request = 1;
+    Ack ack = 2;
+    Nack nack = 3;
+    ExtendVisibility extend = 4;
+    Complete complete = 5;
+  }
+}
+
+message LeaseRequest {
+  string lane = 1;
+  uint32 credit = 2;                    // additive in-flight budget; 1 => strictly serial
+  repeated string group_allow = 3;      // optional filters
+  repeated string group_deny = 4;
+  string consumer_id = 5;
+}
+message Ack { uint64 lease_id = 1; }
+message Nack {
+  uint64 lease_id = 1;
+  NackMode mode = 2;
+  google.protobuf.Duration delay = 3;   // optional redelivery delay
+  map<string, string> failure_meta = 4;
+}
+message ExtendVisibility {
+  uint64 lease_id = 1;
+  google.protobuf.Duration ttl = 2;
+}
+message Complete {
+  bytes external_token = 1;             // keyed by token, so it may also arrive off-stream
+  Outcome outcome = 2;
+  map<string, string> result_meta = 3;
+  google.protobuf.Duration delay = 4;
+}
+
+message WorkServerMsg {
+  oneof msg {
+    LeasedMessage lease = 1;
+    CreditGrant credit = 2;
+    ControlFrame control = 3;
+    StreamError error = 4;
+  }
+}
+
+message LeasedMessage {
+  uint64 lease_id = 1;
+  string lane = 2;
+  string group_id = 3;
+  bytes payload = 4;
+  uint32 attempt = 5;
+  map<string, string> headers = 6;
+  google.protobuf.Timestamp visibility_deadline = 7;
+  bytes external_token = 8;             // present in complete-by-token mode
+  uint64 message_id = 9;
+}
+
+message CreditGrant {
+  string lane = 1;
+  uint32 granted = 2;
+}
+
+enum ControlKind {
+  CONTROL_KIND_UNSPECIFIED = 0;
+  PAUSE_LANE = 1;
+  RESUME_LANE = 2;
+  PAUSE_GROUP = 3;
+  RESUME_GROUP = 4;
+}
+message ControlFrame {
+  ControlKind kind = 1;
+  string lane = 2;
+  string group_id = 3;
+}
+
+enum ErrorCode {
+  OK = 0;
+  NOT_LEADER = 1;
+  LEASE_EXPIRED = 2;
+  UNKNOWN_LEASE = 3;
+  POLICY_FAULT = 4;
+  RATE_LIMITED = 5;
+  UNKNOWN_TOKEN = 6;
+}
+message StreamError {
+  ErrorCode code = 1;
+  string detail = 2;
+  uint64 lease_id = 3;
+  string leader_addr = 4;               // set when code = NOT_LEADER
+}
+
+// NotLeader is attached as an error detail on unary RPCs that hit a follower.
+message NotLeader {
+  string leader_addr = 1;
+  string leader_id = 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Control-plane messages
+// ─────────────────────────────────────────────────────────────────────────────
+
+message LaneRef { string lane = 1; }
+message GroupRef { string lane = 1; string group_id = 2; }
+
+message GroupConfig {
+  string lane = 1;
+  string group_id = 2;
+  double weight = 3;
+  uint32 batch_size = 4;
+  bool paused = 5;
+}
+message SetGroupConfigRequest {
+  string lane = 1;
+  string group_id = 2;
+  optional double weight = 3;
+  optional uint32 batch_size = 4;
+}
+message GroupOpResult {
+  uint64 affected_messages = 1;
+}
+message TeardownRequest { string group_id = 1; }
+message TeardownResult {
+  repeated string affected_lanes = 1;
+  uint64 affected_messages = 2;
+}
+
+// Policy management. The policy source is opaque code in a chosen engine; the
+// broker compiles, validates, and hot-reloads it. Built-ins are expressed in
+// the same mechanism.
+enum PolicyKind {
+  POLICY_KIND_UNSPECIFIED = 0;
+  DRR = 1;
+  STRICT_PRIORITY = 2;
+  WFQ = 3;
+  LOTTERY = 4;
+  CUSTOM = 5;
+}
+enum PolicyMode {
+  POLICY_MODE_UNSPECIFIED = 0;
+  SCORE = 1;     // policy returns one score per group; broker owns the mechanism
+  DECIDE = 2;    // policy returns {group_id, take}; broker still owns deficit accounting
+}
+message PolicySource {
+  PolicyKind kind = 1;
+  PolicyMode mode = 2;
+  string engine = 3;                    // "builtin" | "cel" | "wasm" | "starlark"
+  bytes code = 4;                       // the policy source (empty for pure built-ins)
+  map<string, string> params = 5;       // mechanism config (e.g. quantum)
+}
+message SetPolicyRequest {
+  string lane = 1;
+  PolicySource source = 2;
+}
+message PolicyInfo {
+  string lane = 1;
+  PolicySource source = 2;
+  uint64 policy_version = 3;
+  string source_hash = 4;               // sha256 of code
+  uint64 fault_count = 5;
+  bool quarantined = 6;
+}
+message ValidatePolicyResult {
+  bool ok = 1;
+  repeated string diagnostics = 2;
+  double estimated_cost = 3;
+}
+
+// Cron.
+enum MisfirePolicy {
+  MISFIRE_POLICY_UNSPECIFIED = 0;
+  FIRE_ONCE = 1;     // publish once, jump to next future slot
+  FIRE_ALL = 2;      // publish per missed slot within grace
+}
+message ScheduleCronRequest {
+  string cron_id = 1;                   // idempotent
+  string lane = 2;
+  string group_id = 3;
+  bytes payload = 4;
+  map<string, string> headers = 5;
+  string schedule = 6;                  // UTC crontab
+  string timezone = 7;
+  MisfirePolicy misfire = 8;
+  bool coalesce = 9;
+  google.protobuf.Timestamp start_at = 10;
+  google.protobuf.Timestamp end_at = 11;
+}
+message CronRef { string cron_id = 1; }
+message CronInfo {
+  string cron_id = 1;
+  string lane = 2;
+  string schedule = 3;
+  uint64 next_fire_ms = 4;
+  uint64 last_fire_ms = 5;
+  bool paused = 6;
+}
+message ListCronRequest {
+  string lane = 1;                      // optional filter
+  uint32 next_n = 2;                    // include next-N occurrences per cron
+}
+message ListCronResponse {
+  repeated CronInfo crons = 1;
+  map<string, NextFires> next_fires = 2; // cron_id -> upcoming instants
+}
+message NextFires { repeated uint64 fire_ms = 1; }
+message CronOpResult { bool existed = 1; }
+
+// Singleton leases.
+message SingletonLease {
+  string name = 1;
+  string holder = 2;
+  uint64 deadline_ms = 3;
+  uint64 fence = 4;                     // strictly-increasing fencing token
+}
+message AcquireSingletonRequest {
+  string name = 1;
+  string holder = 2;
+  google.protobuf.Duration ttl = 3;
+}
+message RenewSingletonRequest {
+  string name = 1;
+  string holder = 2;
+  uint64 fence = 3;
+  google.protobuf.Duration ttl = 4;
+}
+message ReleaseSingletonRequest {
+  string name = 1;
+  string holder = 2;
+  uint64 fence = 3;
+}
+message SingletonOpResult { bool released = 1; }
+
+// Async completion off-stream.
+message CompleteByTokenRequest {
+  bytes external_token = 1;
+  Outcome outcome = 2;
+  map<string, string> result_meta = 3;
+  google.protobuf.Duration delay = 4;
+}
+message CompleteResult {
+  bool resolved = 1;
+  bool unknown_token = 2;               // benign for at-least-once callbacks
+}
+
+// Introspection.
+message GetStatsRequest {
+  string lane = 1;                      // optional filter
+  string group_id = 2;                  // optional filter
+}
+message StatsResponse {
+  repeated LaneStats lanes = 1;
+}
+message LaneStats {
+  string lane = 1;
+  uint64 leasable = 2;
+  uint64 delayed = 3;
+  uint64 inflight = 4;
+  uint64 dlq_depth = 5;
+  double publish_rate = 6;              // EWMA
+  double lease_rate = 7;
+  double ack_rate = 8;
+  uint64 oldest_age_ms = 9;
+  uint64 group_count = 10;
+  uint64 policy_version = 11;
+}
+message DescribeClusterRequest {}
+message ClusterInfo {
+  string leader_id = 1;
+  string leader_addr = 2;
+  uint64 term = 3;
+  uint64 applied_index = 4;
+  repeated PeerInfo peers = 5;
+}
+message PeerInfo {
+  string id = 1;
+  string addr = 2;
+  string suffrage = 3;                  // Voter | Nonvoter
+}
+message HealthRequest {}
+message HealthResponse {
+  bool serving = 1;
+  bool has_quorum = 2;
+  bool is_leader = 3;
+}
