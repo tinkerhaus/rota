@@ -12,6 +12,7 @@ const (
 	tagLease     byte = 0x03
 	tagTimeIndex byte = 0x04
 	tagDLQ       byte = 0x05
+	tagPolicy    byte = 0x06
 	tagRaftLog   byte = 0xFE
 	tagRaftKV    byte = 0xFF
 )
@@ -153,10 +154,15 @@ func DLQLanePrefix(lane string) []byte {
 	return append(k, lp(lane)...)
 }
 
+// PolicyKey: 0x06 ++ LP(lane) — the lane's replicated policy binding.
+func PolicyKey(lane string) []byte {
+	return append([]byte{tagPolicy}, lp(lane)...)
+}
+
 // AppKeyspaceBounds returns the [lo, hi) range covering all application tables
 // (everything EXCEPT the raft log/stable store at 0xFE/0xFF). Used by FSM
 // snapshots so a snapshot/restore never clobbers a node's own raft log.
-func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagDLQ + 1} }
+func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagPolicy + 1} }
 
 // RaftLogKey / RaftLogPrefix: 0xFE ++ u64be(index)
 func RaftLogKey(index uint64) []byte { return append([]byte{tagRaftLog}, u64be(index)...) }

@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/hashicorp/raft"
 
 	"github.com/tinkerhaus/rota/internal/fsm"
+	"github.com/tinkerhaus/rota/internal/policy"
 	"github.com/tinkerhaus/rota/internal/raftpebble"
 	"github.com/tinkerhaus/rota/internal/scheduler"
 	"github.com/tinkerhaus/rota/internal/storage"
@@ -48,6 +50,9 @@ type Node struct {
 	raft   *raft.Raft
 	sched  *scheduler.Scheduler
 	cancel context.CancelFunc
+
+	polMu        sync.Mutex
+	loadedPolVer map[string]uint64 // lane -> compiled policy version on this node
 }
 
 type PublishReq struct {
@@ -120,7 +125,10 @@ func Open(cfg Config) (*Node, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	n := &Node{cfg: cfg, store: st, fsm: f, raft: r, sched: scheduler.New(), cancel: cancel}
+	n := &Node{
+		cfg: cfg, store: st, fsm: f, raft: r, sched: scheduler.New(),
+		cancel: cancel, loadedPolVer: map[string]uint64{},
+	}
 	go n.chronosLoop(ctx)
 	return n, nil
 }
@@ -230,6 +238,7 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 }
 
 func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error) {
+	n.ensurePolicy(lane)
 	groups, err := n.store.ListGroups(lane)
 	if err != nil {
 		return nil, false, err
@@ -237,13 +246,15 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	active := make([]scheduler.GroupStat, 0, len(groups))
 	for _, g := range groups {
 		if g.Ready > 0 {
-			active = append(active, scheduler.GroupStat{ID: g.ID, Ready: int(g.Ready), Weight: g.Weight})
+			active = append(active, scheduler.GroupStat{
+				ID: g.ID, Backlog: int(g.Ready), InFlight: int(g.InFlight), Weight: g.Weight,
+			})
 		}
 	}
 	if len(active) == 0 {
 		return nil, false, nil
 	}
-	gid, ok := n.sched.Pick(lane, active)
+	gid, _, ok := n.sched.Pick(lane, active, int64(nowMs()))
 	if !ok {
 		return nil, false, nil
 	}
@@ -287,6 +298,83 @@ func (n *Node) Extend(leaseID, ttlMs uint64) error {
 }
 
 func (n *Node) DLQCount(lane string) (int, error) { return n.store.CountDLQ(lane) }
+
+// SetPolicy validates, replicates, and hot-installs a lane's scheduling policy.
+func (n *Node) SetPolicy(lane string, b policy.Binding) error {
+	if err := policy.Validate(b); err != nil {
+		return fmt.Errorf("policy rejected: %w", err)
+	}
+	prev := uint64(0)
+	if cur, ok := n.GetPolicy(lane); ok {
+		prev = cur.Version
+	}
+	b.Version = prev + 1
+	b.Hash = policy.HashSource(b.Source)
+	data, err := json.Marshal(b)
+	if err != nil {
+		return err
+	}
+	if _, err := n.apply(fsm.Command{Type: fsm.CmdSetPolicy, Policy: &fsm.PolicyCmd{Lane: lane, Binding: data}}); err != nil {
+		return err
+	}
+	c, err := policy.Compile(b)
+	if err != nil {
+		return err
+	}
+	n.sched.SetPolicy(lane, c)
+	n.polMu.Lock()
+	n.loadedPolVer[lane] = b.Version
+	n.polMu.Unlock()
+	return nil
+}
+
+func (n *Node) GetPolicy(lane string) (policy.Binding, bool) {
+	raw, ok, err := n.store.GetRaw(storage.PolicyKey(lane))
+	if err != nil || !ok {
+		return policy.Binding{}, false
+	}
+	var b policy.Binding
+	if json.Unmarshal(raw, &b) != nil {
+		return policy.Binding{}, false
+	}
+	return b, true
+}
+
+func (n *Node) ValidatePolicy(b policy.Binding) error { return policy.Validate(b) }
+
+func (n *Node) PolicyQuarantined(lane string) bool { return n.sched.Quarantined(lane) }
+
+// ensurePolicy lazily (re)compiles a lane's policy from the replicated binding
+// when the stored version differs from what this node currently has loaded. This
+// makes a freshly-elected leader pick up policies set while it was a follower.
+func (n *Node) ensurePolicy(lane string) {
+	raw, ok, err := n.store.GetRaw(storage.PolicyKey(lane))
+	if err != nil {
+		return
+	}
+	n.polMu.Lock()
+	defer n.polMu.Unlock()
+	if !ok {
+		if n.loadedPolVer[lane] != 0 {
+			n.sched.ClearPolicy(lane)
+			delete(n.loadedPolVer, lane)
+		}
+		return
+	}
+	var b policy.Binding
+	if json.Unmarshal(raw, &b) != nil {
+		return
+	}
+	if n.loadedPolVer[lane] == b.Version {
+		return
+	}
+	c, err := policy.Compile(b)
+	if err != nil {
+		return // keep current policy; compile failure is surfaced at SetPolicy time
+	}
+	n.sched.SetPolicy(lane, c)
+	n.loadedPolVer[lane] = b.Version
+}
 
 func (n *Node) chronosLoop(ctx context.Context) {
 	t := time.NewTicker(25 * time.Millisecond)

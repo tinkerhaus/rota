@@ -64,6 +64,8 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyExtend(b, cmd.Extend)
 	case CmdFireTimer:
 		res, err = f.applyFireTimer(b, cmd.Fire)
+	case CmdSetPolicy:
+		err = b.Set(storage.PolicyKey(cmd.Policy.Lane), cmd.Policy.Binding, nil)
 	}
 	if err != nil {
 		return err

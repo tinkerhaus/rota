@@ -11,6 +11,7 @@ const (
 	CmdNack
 	CmdExtend
 	CmdFireTimer
+	CmdSetPolicy
 )
 
 // NackMode mirrors rota.v1.NackMode.
@@ -30,6 +31,14 @@ type Command struct {
 	Nack    *NackCmd      `json:"n,omitempty"`
 	Extend  *ExtendCmd    `json:"e,omitempty"`
 	Fire    *FireTimerCmd `json:"f,omitempty"`
+	Policy  *PolicyCmd    `json:"pol,omitempty"`
+}
+
+// PolicyCmd installs a lane's policy binding (replicated as config; the leader
+// then compiles and hot-swaps it into the scheduler).
+type PolicyCmd struct {
+	Lane    string `json:"lane"`
+	Binding []byte `json:"b"` // JSON-encoded policy.Binding
 }
 
 type PublishCmd struct {

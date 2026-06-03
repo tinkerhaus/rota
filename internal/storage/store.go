@@ -47,9 +47,10 @@ func (s *Store) GetProto(key []byte, m proto.Message) (bool, error) {
 
 // GroupInfo is the per-group scheduling snapshot the node feeds to the scheduler.
 type GroupInfo struct {
-	ID     string
-	Ready  uint64
-	Weight float64
+	ID       string
+	Ready    uint64
+	InFlight uint64
+	Weight   float64
 }
 
 // ListGroups returns every group in a lane (the scheduler filters by Ready>0).
@@ -67,7 +68,7 @@ func (s *Store) ListGroups(lane string) ([]GroupInfo, error) {
 		if err := proto.Unmarshal(it.Value(), gm); err != nil {
 			return nil, err
 		}
-		out = append(out, GroupInfo{ID: gm.GroupId, Ready: gm.ReadyCount, Weight: gm.Weight})
+		out = append(out, GroupInfo{ID: gm.GroupId, Ready: gm.ReadyCount, InFlight: gm.InflightCount, Weight: gm.Weight})
 	}
 	return out, nil
 }
