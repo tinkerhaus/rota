@@ -19,6 +19,9 @@ const (
 	CmdIssueToken
 	CmdComplete
 	CmdSingleton
+	CmdSetLaneConfig
+	CmdReapGroup
+	CmdTeardownGroup
 )
 
 type GroupOp uint8
@@ -73,6 +76,29 @@ type Command struct {
 	IssueToken     *IssueTokenCmd     `json:"it,omitempty"`
 	Complete       *CompleteCmd       `json:"cp,omitempty"`
 	Singleton      *SingletonCmd      `json:"sg,omitempty"`
+	LaneConfig     *LaneConfigCmd     `json:"lc,omitempty"`
+	ReapGroup      *ReapGroupCmd      `json:"rg,omitempty"`
+	Teardown       *TeardownCmd       `json:"td,omitempty"`
+}
+
+type LaneConfigCmd struct {
+	Lane       string  `json:"lane"`
+	RatePerSec float64 `json:"r"`
+	Burst      uint32  `json:"b"`
+}
+
+type ReapGroupCmd struct {
+	Lane    string `json:"lane"`
+	GroupID string `json:"g"`
+}
+
+type TeardownCmd struct {
+	GroupID string `json:"g"`
+}
+
+type TeardownResult struct {
+	AffectedLanes []string
+	Affected      uint64
 }
 
 type GroupConfigCmd struct {

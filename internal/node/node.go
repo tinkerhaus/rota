@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/hashicorp/raft"
+	"golang.org/x/time/rate"
 
 	"github.com/tinkerhaus/rota/internal/fsm"
 	"github.com/tinkerhaus/rota/internal/observe"
@@ -35,6 +36,7 @@ type Config struct {
 	DataDir      string
 	NodeID       string
 	VisibilityMs uint64
+	IdleReapMs   uint64 // reap drained groups idle longer than this; 0 = disabled
 
 	// Clustering. RaftBind == "" selects the in-memory transport (single-node
 	// dev/test). Otherwise a TCP transport is created on RaftBind.
@@ -54,6 +56,11 @@ type Node struct {
 
 	polMu        sync.Mutex
 	loadedPolVer map[string]uint64 // lane -> compiled policy version on this node
+
+	laneMu        sync.Mutex
+	limiters      map[string]*rate.Limiter     // leader-local dequeue rate limiters
+	loadedLaneCfg map[string]fsm.LaneConfigRec // last-applied lane config per lane
+	paused        map[string]int64             // lane -> paused-until unix ms
 }
 
 type PublishReq struct {
@@ -129,8 +136,11 @@ func Open(cfg Config) (*Node, error) {
 	n := &Node{
 		cfg: cfg, store: st, fsm: f, raft: r, sched: scheduler.New(),
 		cancel: cancel, loadedPolVer: map[string]uint64{},
+		limiters: map[string]*rate.Limiter{}, loadedLaneCfg: map[string]fsm.LaneConfigRec{},
+		paused: map[string]int64{},
 	}
 	go n.chronosLoop(ctx)
+	go n.reapLoop(ctx)
 	return n, nil
 }
 
@@ -241,6 +251,9 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 
 func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error) {
 	n.ensurePolicy(lane)
+	if !n.laneGate(lane) {
+		return nil, false, nil // lane paused or rate-limited: backpressure
+	}
 	groups, err := n.store.ListGroups(lane)
 	if err != nil {
 		return nil, false, err

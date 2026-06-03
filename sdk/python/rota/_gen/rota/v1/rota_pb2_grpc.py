@@ -254,6 +254,21 @@ class ControlStub:
                 request_serializer=rota_dot_v1_dot_rota__pb2.TeardownRequest.SerializeToString,
                 response_deserializer=rota_dot_v1_dot_rota__pb2.TeardownResult.FromString,
                 _registered_method=True)
+        self.SetLaneConfig = channel.unary_unary(
+                '/rota.v1.Control/SetLaneConfig',
+                request_serializer=rota_dot_v1_dot_rota__pb2.SetLaneConfigRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.LaneConfig.FromString,
+                _registered_method=True)
+        self.PauseLane = channel.unary_unary(
+                '/rota.v1.Control/PauseLane',
+                request_serializer=rota_dot_v1_dot_rota__pb2.PauseLaneRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.LaneOpResult.FromString,
+                _registered_method=True)
+        self.ResumeLane = channel.unary_unary(
+                '/rota.v1.Control/ResumeLane',
+                request_serializer=rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.LaneOpResult.FromString,
+                _registered_method=True)
         self.SetPolicy = channel.unary_unary(
                 '/rota.v1.Control/SetPolicy',
                 request_serializer=rota_dot_v1_dot_rota__pb2.SetPolicyRequest.SerializeToString,
@@ -381,6 +396,26 @@ class ControlServicer:
     def TeardownGroup(self, request, context):
         """one call across ALL lanes
         """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetLaneConfig(self, request, context):
+        """Lane configuration + back-pressure hooks.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PauseLane(self, request, context):
+        """stop leasing a lane (circuit breaker hook)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeLane(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -518,6 +553,21 @@ def add_ControlServicer_to_server(servicer, server):
                     servicer.TeardownGroup,
                     request_deserializer=rota_dot_v1_dot_rota__pb2.TeardownRequest.FromString,
                     response_serializer=rota_dot_v1_dot_rota__pb2.TeardownResult.SerializeToString,
+            ),
+            'SetLaneConfig': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetLaneConfig,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.SetLaneConfigRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.LaneConfig.SerializeToString,
+            ),
+            'PauseLane': grpc.unary_unary_rpc_method_handler(
+                    servicer.PauseLane,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.PauseLaneRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.LaneOpResult.SerializeToString,
+            ),
+            'ResumeLane': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeLane,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.LaneRef.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.LaneOpResult.SerializeToString,
             ),
             'SetPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.SetPolicy,
@@ -808,6 +858,87 @@ class Control:
             '/rota.v1.Control/TeardownGroup',
             rota_dot_v1_dot_rota__pb2.TeardownRequest.SerializeToString,
             rota_dot_v1_dot_rota__pb2.TeardownResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetLaneConfig(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/SetLaneConfig',
+            rota_dot_v1_dot_rota__pb2.SetLaneConfigRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.LaneConfig.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PauseLane(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/PauseLane',
+            rota_dot_v1_dot_rota__pb2.PauseLaneRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.LaneOpResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeLane(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/ResumeLane',
+            rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.LaneOpResult.FromString,
             options,
             channel_credentials,
             insecure,

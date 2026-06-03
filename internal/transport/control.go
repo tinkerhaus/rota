@@ -250,3 +250,45 @@ func (c *ControlService) Health(ctx context.Context, req *rotav1.HealthRequest) 
 	serving, quorum, leader := c.n.Health()
 	return &rotav1.HealthResponse{Serving: serving, HasQuorum: quorum, IsLeader: leader}, nil
 }
+
+// ─── Lane config + back-pressure + reap/teardown ───────────────────────────────
+
+func (c *ControlService) SetLaneConfig(ctx context.Context, req *rotav1.SetLaneConfigRequest) (*rotav1.LaneConfig, error) {
+	if err := c.n.SetLaneRateLimit(req.GetLane(), req.GetRatePerSec(), req.GetBurst()); err != nil {
+		return nil, err
+	}
+	return &rotav1.LaneConfig{
+		Lane: req.GetLane(), RatePerSec: req.GetRatePerSec(), Burst: req.GetBurst(),
+		Paused: c.n.LanePaused(req.GetLane()),
+	}, nil
+}
+
+func (c *ControlService) PauseLane(ctx context.Context, req *rotav1.PauseLaneRequest) (*rotav1.LaneOpResult, error) {
+	c.n.PauseLane(req.GetLane(), uint64(req.GetDuration().AsDuration().Milliseconds()))
+	return &rotav1.LaneOpResult{Ok: true}, nil
+}
+
+func (c *ControlService) ResumeLane(ctx context.Context, req *rotav1.LaneRef) (*rotav1.LaneOpResult, error) {
+	c.n.ResumeLane(req.GetLane())
+	return &rotav1.LaneOpResult{Ok: true}, nil
+}
+
+func (c *ControlService) ReapGroup(ctx context.Context, req *rotav1.GroupRef) (*rotav1.GroupOpResult, error) {
+	ok, err := c.n.ReapGroup(req.GetLane(), req.GetGroupId())
+	if err != nil {
+		return nil, err
+	}
+	var aff uint64
+	if ok {
+		aff = 1
+	}
+	return &rotav1.GroupOpResult{AffectedMessages: aff}, nil
+}
+
+func (c *ControlService) TeardownGroup(ctx context.Context, req *rotav1.TeardownRequest) (*rotav1.TeardownResult, error) {
+	lanes, aff, err := c.n.TeardownGroup(req.GetGroupId())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.TeardownResult{AffectedLanes: lanes, AffectedMessages: aff}, nil
+}

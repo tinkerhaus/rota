@@ -2431,6 +2431,230 @@ func (x *GroupRef) GetGroupId() string {
 	return ""
 }
 
+type LaneConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lane          string                 `protobuf:"bytes,1,opt,name=lane,proto3" json:"lane,omitempty"`
+	RatePerSec    float64                `protobuf:"fixed64,2,opt,name=rate_per_sec,json=ratePerSec,proto3" json:"rate_per_sec,omitempty"` // broker-side dequeue rate limit; 0 = unlimited
+	Burst         uint32                 `protobuf:"varint,3,opt,name=burst,proto3" json:"burst,omitempty"`
+	Paused        bool                   `protobuf:"varint,4,opt,name=paused,proto3" json:"paused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LaneConfig) Reset() {
+	*x = LaneConfig{}
+	mi := &file_rota_v1_rota_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LaneConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LaneConfig) ProtoMessage() {}
+
+func (x *LaneConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LaneConfig.ProtoReflect.Descriptor instead.
+func (*LaneConfig) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *LaneConfig) GetLane() string {
+	if x != nil {
+		return x.Lane
+	}
+	return ""
+}
+
+func (x *LaneConfig) GetRatePerSec() float64 {
+	if x != nil {
+		return x.RatePerSec
+	}
+	return 0
+}
+
+func (x *LaneConfig) GetBurst() uint32 {
+	if x != nil {
+		return x.Burst
+	}
+	return 0
+}
+
+func (x *LaneConfig) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
+}
+
+type SetLaneConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lane          string                 `protobuf:"bytes,1,opt,name=lane,proto3" json:"lane,omitempty"`
+	RatePerSec    float64                `protobuf:"fixed64,2,opt,name=rate_per_sec,json=ratePerSec,proto3" json:"rate_per_sec,omitempty"`
+	Burst         uint32                 `protobuf:"varint,3,opt,name=burst,proto3" json:"burst,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetLaneConfigRequest) Reset() {
+	*x = SetLaneConfigRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetLaneConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetLaneConfigRequest) ProtoMessage() {}
+
+func (x *SetLaneConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetLaneConfigRequest.ProtoReflect.Descriptor instead.
+func (*SetLaneConfigRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SetLaneConfigRequest) GetLane() string {
+	if x != nil {
+		return x.Lane
+	}
+	return ""
+}
+
+func (x *SetLaneConfigRequest) GetRatePerSec() float64 {
+	if x != nil {
+		return x.RatePerSec
+	}
+	return 0
+}
+
+func (x *SetLaneConfigRequest) GetBurst() uint32 {
+	if x != nil {
+		return x.Burst
+	}
+	return 0
+}
+
+type PauseLaneRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lane          string                 `protobuf:"bytes,1,opt,name=lane,proto3" json:"lane,omitempty"`
+	Duration      *durationpb.Duration   `protobuf:"bytes,2,opt,name=duration,proto3" json:"duration,omitempty"` // 0 = until explicitly resumed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PauseLaneRequest) Reset() {
+	*x = PauseLaneRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PauseLaneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PauseLaneRequest) ProtoMessage() {}
+
+func (x *PauseLaneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PauseLaneRequest.ProtoReflect.Descriptor instead.
+func (*PauseLaneRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PauseLaneRequest) GetLane() string {
+	if x != nil {
+		return x.Lane
+	}
+	return ""
+}
+
+func (x *PauseLaneRequest) GetDuration() *durationpb.Duration {
+	if x != nil {
+		return x.Duration
+	}
+	return nil
+}
+
+type LaneOpResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LaneOpResult) Reset() {
+	*x = LaneOpResult{}
+	mi := &file_rota_v1_rota_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LaneOpResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LaneOpResult) ProtoMessage() {}
+
+func (x *LaneOpResult) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LaneOpResult.ProtoReflect.Descriptor instead.
+func (*LaneOpResult) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *LaneOpResult) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
 type GroupConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Lane          string                 `protobuf:"bytes,1,opt,name=lane,proto3" json:"lane,omitempty"`
@@ -2444,7 +2668,7 @@ type GroupConfig struct {
 
 func (x *GroupConfig) Reset() {
 	*x = GroupConfig{}
-	mi := &file_rota_v1_rota_proto_msgTypes[25]
+	mi := &file_rota_v1_rota_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2456,7 +2680,7 @@ func (x *GroupConfig) String() string {
 func (*GroupConfig) ProtoMessage() {}
 
 func (x *GroupConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[25]
+	mi := &file_rota_v1_rota_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2469,7 +2693,7 @@ func (x *GroupConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupConfig.ProtoReflect.Descriptor instead.
 func (*GroupConfig) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{25}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GroupConfig) GetLane() string {
@@ -2519,7 +2743,7 @@ type SetGroupConfigRequest struct {
 
 func (x *SetGroupConfigRequest) Reset() {
 	*x = SetGroupConfigRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[26]
+	mi := &file_rota_v1_rota_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2531,7 +2755,7 @@ func (x *SetGroupConfigRequest) String() string {
 func (*SetGroupConfigRequest) ProtoMessage() {}
 
 func (x *SetGroupConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[26]
+	mi := &file_rota_v1_rota_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2544,7 +2768,7 @@ func (x *SetGroupConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetGroupConfigRequest.ProtoReflect.Descriptor instead.
 func (*SetGroupConfigRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{26}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SetGroupConfigRequest) GetLane() string {
@@ -2584,7 +2808,7 @@ type GroupOpResult struct {
 
 func (x *GroupOpResult) Reset() {
 	*x = GroupOpResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[27]
+	mi := &file_rota_v1_rota_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2596,7 +2820,7 @@ func (x *GroupOpResult) String() string {
 func (*GroupOpResult) ProtoMessage() {}
 
 func (x *GroupOpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[27]
+	mi := &file_rota_v1_rota_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2609,7 +2833,7 @@ func (x *GroupOpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupOpResult.ProtoReflect.Descriptor instead.
 func (*GroupOpResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{27}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GroupOpResult) GetAffectedMessages() uint64 {
@@ -2628,7 +2852,7 @@ type TeardownRequest struct {
 
 func (x *TeardownRequest) Reset() {
 	*x = TeardownRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[28]
+	mi := &file_rota_v1_rota_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2640,7 +2864,7 @@ func (x *TeardownRequest) String() string {
 func (*TeardownRequest) ProtoMessage() {}
 
 func (x *TeardownRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[28]
+	mi := &file_rota_v1_rota_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2653,7 +2877,7 @@ func (x *TeardownRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeardownRequest.ProtoReflect.Descriptor instead.
 func (*TeardownRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{28}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TeardownRequest) GetGroupId() string {
@@ -2673,7 +2897,7 @@ type TeardownResult struct {
 
 func (x *TeardownResult) Reset() {
 	*x = TeardownResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[29]
+	mi := &file_rota_v1_rota_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2685,7 +2909,7 @@ func (x *TeardownResult) String() string {
 func (*TeardownResult) ProtoMessage() {}
 
 func (x *TeardownResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[29]
+	mi := &file_rota_v1_rota_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2698,7 +2922,7 @@ func (x *TeardownResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeardownResult.ProtoReflect.Descriptor instead.
 func (*TeardownResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{29}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TeardownResult) GetAffectedLanes() []string {
@@ -2728,7 +2952,7 @@ type PolicySource struct {
 
 func (x *PolicySource) Reset() {
 	*x = PolicySource{}
-	mi := &file_rota_v1_rota_proto_msgTypes[30]
+	mi := &file_rota_v1_rota_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2740,7 +2964,7 @@ func (x *PolicySource) String() string {
 func (*PolicySource) ProtoMessage() {}
 
 func (x *PolicySource) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[30]
+	mi := &file_rota_v1_rota_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2753,7 +2977,7 @@ func (x *PolicySource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicySource.ProtoReflect.Descriptor instead.
 func (*PolicySource) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{30}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PolicySource) GetKind() PolicyKind {
@@ -2801,7 +3025,7 @@ type SetPolicyRequest struct {
 
 func (x *SetPolicyRequest) Reset() {
 	*x = SetPolicyRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[31]
+	mi := &file_rota_v1_rota_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2813,7 +3037,7 @@ func (x *SetPolicyRequest) String() string {
 func (*SetPolicyRequest) ProtoMessage() {}
 
 func (x *SetPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[31]
+	mi := &file_rota_v1_rota_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2826,7 +3050,7 @@ func (x *SetPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{31}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SetPolicyRequest) GetLane() string {
@@ -2857,7 +3081,7 @@ type PolicyInfo struct {
 
 func (x *PolicyInfo) Reset() {
 	*x = PolicyInfo{}
-	mi := &file_rota_v1_rota_proto_msgTypes[32]
+	mi := &file_rota_v1_rota_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2869,7 +3093,7 @@ func (x *PolicyInfo) String() string {
 func (*PolicyInfo) ProtoMessage() {}
 
 func (x *PolicyInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[32]
+	mi := &file_rota_v1_rota_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2882,7 +3106,7 @@ func (x *PolicyInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyInfo.ProtoReflect.Descriptor instead.
 func (*PolicyInfo) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{32}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PolicyInfo) GetLane() string {
@@ -2938,7 +3162,7 @@ type ValidatePolicyResult struct {
 
 func (x *ValidatePolicyResult) Reset() {
 	*x = ValidatePolicyResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[33]
+	mi := &file_rota_v1_rota_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2950,7 +3174,7 @@ func (x *ValidatePolicyResult) String() string {
 func (*ValidatePolicyResult) ProtoMessage() {}
 
 func (x *ValidatePolicyResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[33]
+	mi := &file_rota_v1_rota_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2963,7 +3187,7 @@ func (x *ValidatePolicyResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidatePolicyResult.ProtoReflect.Descriptor instead.
 func (*ValidatePolicyResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{33}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ValidatePolicyResult) GetOk() bool {
@@ -3006,7 +3230,7 @@ type ScheduleCronRequest struct {
 
 func (x *ScheduleCronRequest) Reset() {
 	*x = ScheduleCronRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[34]
+	mi := &file_rota_v1_rota_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3018,7 +3242,7 @@ func (x *ScheduleCronRequest) String() string {
 func (*ScheduleCronRequest) ProtoMessage() {}
 
 func (x *ScheduleCronRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[34]
+	mi := &file_rota_v1_rota_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3031,7 +3255,7 @@ func (x *ScheduleCronRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleCronRequest.ProtoReflect.Descriptor instead.
 func (*ScheduleCronRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{34}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ScheduleCronRequest) GetCronId() string {
@@ -3120,7 +3344,7 @@ type CronRef struct {
 
 func (x *CronRef) Reset() {
 	*x = CronRef{}
-	mi := &file_rota_v1_rota_proto_msgTypes[35]
+	mi := &file_rota_v1_rota_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3132,7 +3356,7 @@ func (x *CronRef) String() string {
 func (*CronRef) ProtoMessage() {}
 
 func (x *CronRef) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[35]
+	mi := &file_rota_v1_rota_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3145,7 +3369,7 @@ func (x *CronRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronRef.ProtoReflect.Descriptor instead.
 func (*CronRef) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{35}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CronRef) GetCronId() string {
@@ -3169,7 +3393,7 @@ type CronInfo struct {
 
 func (x *CronInfo) Reset() {
 	*x = CronInfo{}
-	mi := &file_rota_v1_rota_proto_msgTypes[36]
+	mi := &file_rota_v1_rota_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3181,7 +3405,7 @@ func (x *CronInfo) String() string {
 func (*CronInfo) ProtoMessage() {}
 
 func (x *CronInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[36]
+	mi := &file_rota_v1_rota_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3194,7 +3418,7 @@ func (x *CronInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronInfo.ProtoReflect.Descriptor instead.
 func (*CronInfo) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{36}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CronInfo) GetCronId() string {
@@ -3249,7 +3473,7 @@ type ListCronRequest struct {
 
 func (x *ListCronRequest) Reset() {
 	*x = ListCronRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[37]
+	mi := &file_rota_v1_rota_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3261,7 +3485,7 @@ func (x *ListCronRequest) String() string {
 func (*ListCronRequest) ProtoMessage() {}
 
 func (x *ListCronRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[37]
+	mi := &file_rota_v1_rota_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3274,7 +3498,7 @@ func (x *ListCronRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCronRequest.ProtoReflect.Descriptor instead.
 func (*ListCronRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{37}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListCronRequest) GetLane() string {
@@ -3301,7 +3525,7 @@ type ListCronResponse struct {
 
 func (x *ListCronResponse) Reset() {
 	*x = ListCronResponse{}
-	mi := &file_rota_v1_rota_proto_msgTypes[38]
+	mi := &file_rota_v1_rota_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3313,7 +3537,7 @@ func (x *ListCronResponse) String() string {
 func (*ListCronResponse) ProtoMessage() {}
 
 func (x *ListCronResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[38]
+	mi := &file_rota_v1_rota_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3326,7 +3550,7 @@ func (x *ListCronResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCronResponse.ProtoReflect.Descriptor instead.
 func (*ListCronResponse) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{38}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListCronResponse) GetCrons() []*CronInfo {
@@ -3352,7 +3576,7 @@ type NextFires struct {
 
 func (x *NextFires) Reset() {
 	*x = NextFires{}
-	mi := &file_rota_v1_rota_proto_msgTypes[39]
+	mi := &file_rota_v1_rota_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3364,7 +3588,7 @@ func (x *NextFires) String() string {
 func (*NextFires) ProtoMessage() {}
 
 func (x *NextFires) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[39]
+	mi := &file_rota_v1_rota_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3377,7 +3601,7 @@ func (x *NextFires) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NextFires.ProtoReflect.Descriptor instead.
 func (*NextFires) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{39}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *NextFires) GetFireMs() []uint64 {
@@ -3396,7 +3620,7 @@ type CronOpResult struct {
 
 func (x *CronOpResult) Reset() {
 	*x = CronOpResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[40]
+	mi := &file_rota_v1_rota_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +3632,7 @@ func (x *CronOpResult) String() string {
 func (*CronOpResult) ProtoMessage() {}
 
 func (x *CronOpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[40]
+	mi := &file_rota_v1_rota_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +3645,7 @@ func (x *CronOpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronOpResult.ProtoReflect.Descriptor instead.
 func (*CronOpResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{40}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CronOpResult) GetExisted() bool {
@@ -3444,7 +3668,7 @@ type SingletonLease struct {
 
 func (x *SingletonLease) Reset() {
 	*x = SingletonLease{}
-	mi := &file_rota_v1_rota_proto_msgTypes[41]
+	mi := &file_rota_v1_rota_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3456,7 +3680,7 @@ func (x *SingletonLease) String() string {
 func (*SingletonLease) ProtoMessage() {}
 
 func (x *SingletonLease) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[41]
+	mi := &file_rota_v1_rota_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3469,7 +3693,7 @@ func (x *SingletonLease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SingletonLease.ProtoReflect.Descriptor instead.
 func (*SingletonLease) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{41}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *SingletonLease) GetName() string {
@@ -3511,7 +3735,7 @@ type AcquireSingletonRequest struct {
 
 func (x *AcquireSingletonRequest) Reset() {
 	*x = AcquireSingletonRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[42]
+	mi := &file_rota_v1_rota_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3523,7 +3747,7 @@ func (x *AcquireSingletonRequest) String() string {
 func (*AcquireSingletonRequest) ProtoMessage() {}
 
 func (x *AcquireSingletonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[42]
+	mi := &file_rota_v1_rota_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3536,7 +3760,7 @@ func (x *AcquireSingletonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireSingletonRequest.ProtoReflect.Descriptor instead.
 func (*AcquireSingletonRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{42}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AcquireSingletonRequest) GetName() string {
@@ -3572,7 +3796,7 @@ type RenewSingletonRequest struct {
 
 func (x *RenewSingletonRequest) Reset() {
 	*x = RenewSingletonRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[43]
+	mi := &file_rota_v1_rota_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3584,7 +3808,7 @@ func (x *RenewSingletonRequest) String() string {
 func (*RenewSingletonRequest) ProtoMessage() {}
 
 func (x *RenewSingletonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[43]
+	mi := &file_rota_v1_rota_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3597,7 +3821,7 @@ func (x *RenewSingletonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewSingletonRequest.ProtoReflect.Descriptor instead.
 func (*RenewSingletonRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{43}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RenewSingletonRequest) GetName() string {
@@ -3639,7 +3863,7 @@ type ReleaseSingletonRequest struct {
 
 func (x *ReleaseSingletonRequest) Reset() {
 	*x = ReleaseSingletonRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[44]
+	mi := &file_rota_v1_rota_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3651,7 +3875,7 @@ func (x *ReleaseSingletonRequest) String() string {
 func (*ReleaseSingletonRequest) ProtoMessage() {}
 
 func (x *ReleaseSingletonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[44]
+	mi := &file_rota_v1_rota_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3664,7 +3888,7 @@ func (x *ReleaseSingletonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseSingletonRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseSingletonRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{44}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ReleaseSingletonRequest) GetName() string {
@@ -3697,7 +3921,7 @@ type SingletonOpResult struct {
 
 func (x *SingletonOpResult) Reset() {
 	*x = SingletonOpResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[45]
+	mi := &file_rota_v1_rota_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3709,7 +3933,7 @@ func (x *SingletonOpResult) String() string {
 func (*SingletonOpResult) ProtoMessage() {}
 
 func (x *SingletonOpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[45]
+	mi := &file_rota_v1_rota_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3722,7 +3946,7 @@ func (x *SingletonOpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SingletonOpResult.ProtoReflect.Descriptor instead.
 func (*SingletonOpResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{45}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *SingletonOpResult) GetReleased() bool {
@@ -3745,7 +3969,7 @@ type CompleteByTokenRequest struct {
 
 func (x *CompleteByTokenRequest) Reset() {
 	*x = CompleteByTokenRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[46]
+	mi := &file_rota_v1_rota_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3757,7 +3981,7 @@ func (x *CompleteByTokenRequest) String() string {
 func (*CompleteByTokenRequest) ProtoMessage() {}
 
 func (x *CompleteByTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[46]
+	mi := &file_rota_v1_rota_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3770,7 +3994,7 @@ func (x *CompleteByTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteByTokenRequest.ProtoReflect.Descriptor instead.
 func (*CompleteByTokenRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{46}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *CompleteByTokenRequest) GetExternalToken() []byte {
@@ -3811,7 +4035,7 @@ type CompleteResult struct {
 
 func (x *CompleteResult) Reset() {
 	*x = CompleteResult{}
-	mi := &file_rota_v1_rota_proto_msgTypes[47]
+	mi := &file_rota_v1_rota_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3823,7 +4047,7 @@ func (x *CompleteResult) String() string {
 func (*CompleteResult) ProtoMessage() {}
 
 func (x *CompleteResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[47]
+	mi := &file_rota_v1_rota_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3836,7 +4060,7 @@ func (x *CompleteResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteResult.ProtoReflect.Descriptor instead.
 func (*CompleteResult) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{47}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CompleteResult) GetResolved() bool {
@@ -3864,7 +4088,7 @@ type GetStatsRequest struct {
 
 func (x *GetStatsRequest) Reset() {
 	*x = GetStatsRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[48]
+	mi := &file_rota_v1_rota_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3876,7 +4100,7 @@ func (x *GetStatsRequest) String() string {
 func (*GetStatsRequest) ProtoMessage() {}
 
 func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[48]
+	mi := &file_rota_v1_rota_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3889,7 +4113,7 @@ func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetStatsRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{48}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GetStatsRequest) GetLane() string {
@@ -3915,7 +4139,7 @@ type StatsResponse struct {
 
 func (x *StatsResponse) Reset() {
 	*x = StatsResponse{}
-	mi := &file_rota_v1_rota_proto_msgTypes[49]
+	mi := &file_rota_v1_rota_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3927,7 +4151,7 @@ func (x *StatsResponse) String() string {
 func (*StatsResponse) ProtoMessage() {}
 
 func (x *StatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[49]
+	mi := &file_rota_v1_rota_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3940,7 +4164,7 @@ func (x *StatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsResponse.ProtoReflect.Descriptor instead.
 func (*StatsResponse) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{49}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *StatsResponse) GetLanes() []*LaneStats {
@@ -3969,7 +4193,7 @@ type LaneStats struct {
 
 func (x *LaneStats) Reset() {
 	*x = LaneStats{}
-	mi := &file_rota_v1_rota_proto_msgTypes[50]
+	mi := &file_rota_v1_rota_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3981,7 +4205,7 @@ func (x *LaneStats) String() string {
 func (*LaneStats) ProtoMessage() {}
 
 func (x *LaneStats) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[50]
+	mi := &file_rota_v1_rota_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3994,7 +4218,7 @@ func (x *LaneStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LaneStats.ProtoReflect.Descriptor instead.
 func (*LaneStats) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{50}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *LaneStats) GetLane() string {
@@ -4082,7 +4306,7 @@ type DescribeClusterRequest struct {
 
 func (x *DescribeClusterRequest) Reset() {
 	*x = DescribeClusterRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[51]
+	mi := &file_rota_v1_rota_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4094,7 +4318,7 @@ func (x *DescribeClusterRequest) String() string {
 func (*DescribeClusterRequest) ProtoMessage() {}
 
 func (x *DescribeClusterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[51]
+	mi := &file_rota_v1_rota_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4107,7 +4331,7 @@ func (x *DescribeClusterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeClusterRequest.ProtoReflect.Descriptor instead.
 func (*DescribeClusterRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{51}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{55}
 }
 
 type ClusterInfo struct {
@@ -4123,7 +4347,7 @@ type ClusterInfo struct {
 
 func (x *ClusterInfo) Reset() {
 	*x = ClusterInfo{}
-	mi := &file_rota_v1_rota_proto_msgTypes[52]
+	mi := &file_rota_v1_rota_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4135,7 +4359,7 @@ func (x *ClusterInfo) String() string {
 func (*ClusterInfo) ProtoMessage() {}
 
 func (x *ClusterInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[52]
+	mi := &file_rota_v1_rota_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4148,7 +4372,7 @@ func (x *ClusterInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClusterInfo.ProtoReflect.Descriptor instead.
 func (*ClusterInfo) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{52}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ClusterInfo) GetLeaderId() string {
@@ -4197,7 +4421,7 @@ type PeerInfo struct {
 
 func (x *PeerInfo) Reset() {
 	*x = PeerInfo{}
-	mi := &file_rota_v1_rota_proto_msgTypes[53]
+	mi := &file_rota_v1_rota_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4209,7 +4433,7 @@ func (x *PeerInfo) String() string {
 func (*PeerInfo) ProtoMessage() {}
 
 func (x *PeerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[53]
+	mi := &file_rota_v1_rota_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4222,7 +4446,7 @@ func (x *PeerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerInfo.ProtoReflect.Descriptor instead.
 func (*PeerInfo) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{53}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *PeerInfo) GetId() string {
@@ -4254,7 +4478,7 @@ type HealthRequest struct {
 
 func (x *HealthRequest) Reset() {
 	*x = HealthRequest{}
-	mi := &file_rota_v1_rota_proto_msgTypes[54]
+	mi := &file_rota_v1_rota_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4266,7 +4490,7 @@ func (x *HealthRequest) String() string {
 func (*HealthRequest) ProtoMessage() {}
 
 func (x *HealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[54]
+	mi := &file_rota_v1_rota_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4279,7 +4503,7 @@ func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{54}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{58}
 }
 
 type HealthResponse struct {
@@ -4293,7 +4517,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_rota_v1_rota_proto_msgTypes[55]
+	mi := &file_rota_v1_rota_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4305,7 +4529,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[55]
+	mi := &file_rota_v1_rota_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4318,7 +4542,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{55}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *HealthResponse) GetServing() bool {
@@ -4537,7 +4761,24 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\x04lane\x18\x01 \x01(\tR\x04lane\"9\n" +
 	"\bGroupRef\x12\x12\n" +
 	"\x04lane\x18\x01 \x01(\tR\x04lane\x12\x19\n" +
-	"\bgroup_id\x18\x02 \x01(\tR\agroupId\"\x8b\x01\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\"p\n" +
+	"\n" +
+	"LaneConfig\x12\x12\n" +
+	"\x04lane\x18\x01 \x01(\tR\x04lane\x12 \n" +
+	"\frate_per_sec\x18\x02 \x01(\x01R\n" +
+	"ratePerSec\x12\x14\n" +
+	"\x05burst\x18\x03 \x01(\rR\x05burst\x12\x16\n" +
+	"\x06paused\x18\x04 \x01(\bR\x06paused\"b\n" +
+	"\x14SetLaneConfigRequest\x12\x12\n" +
+	"\x04lane\x18\x01 \x01(\tR\x04lane\x12 \n" +
+	"\frate_per_sec\x18\x02 \x01(\x01R\n" +
+	"ratePerSec\x12\x14\n" +
+	"\x05burst\x18\x03 \x01(\rR\x05burst\"]\n" +
+	"\x10PauseLaneRequest\x12\x12\n" +
+	"\x04lane\x18\x01 \x01(\tR\x04lane\x125\n" +
+	"\bduration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\bduration\"\x1e\n" +
+	"\fLaneOpResult\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"\x8b\x01\n" +
 	"\vGroupConfig\x12\x12\n" +
 	"\x04lane\x18\x01 \x01(\tR\x04lane\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x16\n" +
@@ -4751,7 +4992,7 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\x06Broker\x12<\n" +
 	"\aPublish\x12\x17.rota.v1.PublishRequest\x1a\x18.rota.v1.PublishResponse\x12K\n" +
 	"\fPublishBatch\x12\x1c.rota.v1.PublishBatchRequest\x1a\x1d.rota.v1.PublishBatchResponse\x12:\n" +
-	"\x04Work\x12\x16.rota.v1.WorkClientMsg\x1a\x16.rota.v1.WorkServerMsg(\x010\x012\x9d\v\n" +
+	"\x04Work\x12\x16.rota.v1.WorkClientMsg\x1a\x16.rota.v1.WorkServerMsg(\x010\x012\xd8\f\n" +
 	"\aControl\x12F\n" +
 	"\x0eSetGroupConfig\x12\x1e.rota.v1.SetGroupConfigRequest\x1a\x14.rota.v1.GroupConfig\x129\n" +
 	"\x0eGetGroupConfig\x12\x11.rota.v1.GroupRef\x1a\x14.rota.v1.GroupConfig\x125\n" +
@@ -4762,7 +5003,11 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\n" +
 	"PurgeGroup\x12\x11.rota.v1.GroupRef\x1a\x16.rota.v1.GroupOpResult\x126\n" +
 	"\tReapGroup\x12\x11.rota.v1.GroupRef\x1a\x16.rota.v1.GroupOpResult\x12B\n" +
-	"\rTeardownGroup\x12\x18.rota.v1.TeardownRequest\x1a\x17.rota.v1.TeardownResult\x12;\n" +
+	"\rTeardownGroup\x12\x18.rota.v1.TeardownRequest\x1a\x17.rota.v1.TeardownResult\x12C\n" +
+	"\rSetLaneConfig\x12\x1d.rota.v1.SetLaneConfigRequest\x1a\x13.rota.v1.LaneConfig\x12=\n" +
+	"\tPauseLane\x12\x19.rota.v1.PauseLaneRequest\x1a\x15.rota.v1.LaneOpResult\x125\n" +
+	"\n" +
+	"ResumeLane\x12\x10.rota.v1.LaneRef\x1a\x15.rota.v1.LaneOpResult\x12;\n" +
 	"\tSetPolicy\x12\x19.rota.v1.SetPolicyRequest\x1a\x13.rota.v1.PolicyInfo\x122\n" +
 	"\tGetPolicy\x12\x10.rota.v1.LaneRef\x1a\x13.rota.v1.PolicyInfo\x12J\n" +
 	"\x0eValidatePolicy\x12\x19.rota.v1.SetPolicyRequest\x1a\x1d.rota.v1.ValidatePolicyResult\x12?\n" +
@@ -4792,7 +5037,7 @@ func file_rota_v1_rota_proto_rawDescGZIP() []byte {
 }
 
 var file_rota_v1_rota_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_rota_v1_rota_proto_msgTypes = make([]protoimpl.MessageInfo, 66)
+var file_rota_v1_rota_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
 var file_rota_v1_rota_proto_goTypes = []any{
 	(MessageState)(0),               // 0: rota.v1.MessageState
 	(NackMode)(0),                   // 1: rota.v1.NackMode
@@ -4827,62 +5072,66 @@ var file_rota_v1_rota_proto_goTypes = []any{
 	(*NotLeader)(nil),               // 30: rota.v1.NotLeader
 	(*LaneRef)(nil),                 // 31: rota.v1.LaneRef
 	(*GroupRef)(nil),                // 32: rota.v1.GroupRef
-	(*GroupConfig)(nil),             // 33: rota.v1.GroupConfig
-	(*SetGroupConfigRequest)(nil),   // 34: rota.v1.SetGroupConfigRequest
-	(*GroupOpResult)(nil),           // 35: rota.v1.GroupOpResult
-	(*TeardownRequest)(nil),         // 36: rota.v1.TeardownRequest
-	(*TeardownResult)(nil),          // 37: rota.v1.TeardownResult
-	(*PolicySource)(nil),            // 38: rota.v1.PolicySource
-	(*SetPolicyRequest)(nil),        // 39: rota.v1.SetPolicyRequest
-	(*PolicyInfo)(nil),              // 40: rota.v1.PolicyInfo
-	(*ValidatePolicyResult)(nil),    // 41: rota.v1.ValidatePolicyResult
-	(*ScheduleCronRequest)(nil),     // 42: rota.v1.ScheduleCronRequest
-	(*CronRef)(nil),                 // 43: rota.v1.CronRef
-	(*CronInfo)(nil),                // 44: rota.v1.CronInfo
-	(*ListCronRequest)(nil),         // 45: rota.v1.ListCronRequest
-	(*ListCronResponse)(nil),        // 46: rota.v1.ListCronResponse
-	(*NextFires)(nil),               // 47: rota.v1.NextFires
-	(*CronOpResult)(nil),            // 48: rota.v1.CronOpResult
-	(*SingletonLease)(nil),          // 49: rota.v1.SingletonLease
-	(*AcquireSingletonRequest)(nil), // 50: rota.v1.AcquireSingletonRequest
-	(*RenewSingletonRequest)(nil),   // 51: rota.v1.RenewSingletonRequest
-	(*ReleaseSingletonRequest)(nil), // 52: rota.v1.ReleaseSingletonRequest
-	(*SingletonOpResult)(nil),       // 53: rota.v1.SingletonOpResult
-	(*CompleteByTokenRequest)(nil),  // 54: rota.v1.CompleteByTokenRequest
-	(*CompleteResult)(nil),          // 55: rota.v1.CompleteResult
-	(*GetStatsRequest)(nil),         // 56: rota.v1.GetStatsRequest
-	(*StatsResponse)(nil),           // 57: rota.v1.StatsResponse
-	(*LaneStats)(nil),               // 58: rota.v1.LaneStats
-	(*DescribeClusterRequest)(nil),  // 59: rota.v1.DescribeClusterRequest
-	(*ClusterInfo)(nil),             // 60: rota.v1.ClusterInfo
-	(*PeerInfo)(nil),                // 61: rota.v1.PeerInfo
-	(*HealthRequest)(nil),           // 62: rota.v1.HealthRequest
-	(*HealthResponse)(nil),          // 63: rota.v1.HealthResponse
-	nil,                             // 64: rota.v1.Message.HeadersEntry
-	nil,                             // 65: rota.v1.DeadLetter.FailureHeadersEntry
-	nil,                             // 66: rota.v1.MessageSpec.HeadersEntry
-	nil,                             // 67: rota.v1.Nack.FailureMetaEntry
-	nil,                             // 68: rota.v1.Complete.ResultMetaEntry
-	nil,                             // 69: rota.v1.LeasedMessage.HeadersEntry
-	nil,                             // 70: rota.v1.PolicySource.ParamsEntry
-	nil,                             // 71: rota.v1.ScheduleCronRequest.HeadersEntry
-	nil,                             // 72: rota.v1.ListCronResponse.NextFiresEntry
-	nil,                             // 73: rota.v1.CompleteByTokenRequest.ResultMetaEntry
-	(*durationpb.Duration)(nil),     // 74: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),   // 75: google.protobuf.Timestamp
+	(*LaneConfig)(nil),              // 33: rota.v1.LaneConfig
+	(*SetLaneConfigRequest)(nil),    // 34: rota.v1.SetLaneConfigRequest
+	(*PauseLaneRequest)(nil),        // 35: rota.v1.PauseLaneRequest
+	(*LaneOpResult)(nil),            // 36: rota.v1.LaneOpResult
+	(*GroupConfig)(nil),             // 37: rota.v1.GroupConfig
+	(*SetGroupConfigRequest)(nil),   // 38: rota.v1.SetGroupConfigRequest
+	(*GroupOpResult)(nil),           // 39: rota.v1.GroupOpResult
+	(*TeardownRequest)(nil),         // 40: rota.v1.TeardownRequest
+	(*TeardownResult)(nil),          // 41: rota.v1.TeardownResult
+	(*PolicySource)(nil),            // 42: rota.v1.PolicySource
+	(*SetPolicyRequest)(nil),        // 43: rota.v1.SetPolicyRequest
+	(*PolicyInfo)(nil),              // 44: rota.v1.PolicyInfo
+	(*ValidatePolicyResult)(nil),    // 45: rota.v1.ValidatePolicyResult
+	(*ScheduleCronRequest)(nil),     // 46: rota.v1.ScheduleCronRequest
+	(*CronRef)(nil),                 // 47: rota.v1.CronRef
+	(*CronInfo)(nil),                // 48: rota.v1.CronInfo
+	(*ListCronRequest)(nil),         // 49: rota.v1.ListCronRequest
+	(*ListCronResponse)(nil),        // 50: rota.v1.ListCronResponse
+	(*NextFires)(nil),               // 51: rota.v1.NextFires
+	(*CronOpResult)(nil),            // 52: rota.v1.CronOpResult
+	(*SingletonLease)(nil),          // 53: rota.v1.SingletonLease
+	(*AcquireSingletonRequest)(nil), // 54: rota.v1.AcquireSingletonRequest
+	(*RenewSingletonRequest)(nil),   // 55: rota.v1.RenewSingletonRequest
+	(*ReleaseSingletonRequest)(nil), // 56: rota.v1.ReleaseSingletonRequest
+	(*SingletonOpResult)(nil),       // 57: rota.v1.SingletonOpResult
+	(*CompleteByTokenRequest)(nil),  // 58: rota.v1.CompleteByTokenRequest
+	(*CompleteResult)(nil),          // 59: rota.v1.CompleteResult
+	(*GetStatsRequest)(nil),         // 60: rota.v1.GetStatsRequest
+	(*StatsResponse)(nil),           // 61: rota.v1.StatsResponse
+	(*LaneStats)(nil),               // 62: rota.v1.LaneStats
+	(*DescribeClusterRequest)(nil),  // 63: rota.v1.DescribeClusterRequest
+	(*ClusterInfo)(nil),             // 64: rota.v1.ClusterInfo
+	(*PeerInfo)(nil),                // 65: rota.v1.PeerInfo
+	(*HealthRequest)(nil),           // 66: rota.v1.HealthRequest
+	(*HealthResponse)(nil),          // 67: rota.v1.HealthResponse
+	nil,                             // 68: rota.v1.Message.HeadersEntry
+	nil,                             // 69: rota.v1.DeadLetter.FailureHeadersEntry
+	nil,                             // 70: rota.v1.MessageSpec.HeadersEntry
+	nil,                             // 71: rota.v1.Nack.FailureMetaEntry
+	nil,                             // 72: rota.v1.Complete.ResultMetaEntry
+	nil,                             // 73: rota.v1.LeasedMessage.HeadersEntry
+	nil,                             // 74: rota.v1.PolicySource.ParamsEntry
+	nil,                             // 75: rota.v1.ScheduleCronRequest.HeadersEntry
+	nil,                             // 76: rota.v1.ListCronResponse.NextFiresEntry
+	nil,                             // 77: rota.v1.CompleteByTokenRequest.ResultMetaEntry
+	(*durationpb.Duration)(nil),     // 78: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),   // 79: google.protobuf.Timestamp
 }
 var file_rota_v1_rota_proto_depIdxs = []int32{
-	64, // 0: rota.v1.Message.headers:type_name -> rota.v1.Message.HeadersEntry
+	68, // 0: rota.v1.Message.headers:type_name -> rota.v1.Message.HeadersEntry
 	0,  // 1: rota.v1.Message.state:type_name -> rota.v1.MessageState
 	8,  // 2: rota.v1.DeadLetter.original:type_name -> rota.v1.Message
-	65, // 3: rota.v1.DeadLetter.failure_headers:type_name -> rota.v1.DeadLetter.FailureHeadersEntry
-	66, // 4: rota.v1.MessageSpec.headers:type_name -> rota.v1.MessageSpec.HeadersEntry
-	74, // 5: rota.v1.MessageSpec.delay:type_name -> google.protobuf.Duration
-	75, // 6: rota.v1.MessageSpec.at:type_name -> google.protobuf.Timestamp
+	69, // 3: rota.v1.DeadLetter.failure_headers:type_name -> rota.v1.DeadLetter.FailureHeadersEntry
+	70, // 4: rota.v1.MessageSpec.headers:type_name -> rota.v1.MessageSpec.HeadersEntry
+	78, // 5: rota.v1.MessageSpec.delay:type_name -> google.protobuf.Duration
+	79, // 6: rota.v1.MessageSpec.at:type_name -> google.protobuf.Timestamp
 	13, // 7: rota.v1.MessageSpec.retry_backoff:type_name -> rota.v1.RetryBackoff
-	74, // 8: rota.v1.MessageSpec.ttl:type_name -> google.protobuf.Duration
-	74, // 9: rota.v1.RetryBackoff.base:type_name -> google.protobuf.Duration
-	74, // 10: rota.v1.RetryBackoff.max:type_name -> google.protobuf.Duration
+	78, // 8: rota.v1.MessageSpec.ttl:type_name -> google.protobuf.Duration
+	78, // 9: rota.v1.RetryBackoff.base:type_name -> google.protobuf.Duration
+	78, // 10: rota.v1.RetryBackoff.max:type_name -> google.protobuf.Duration
 	12, // 11: rota.v1.PublishRequest.message:type_name -> rota.v1.MessageSpec
 	12, // 12: rota.v1.PublishBatchRequest.messages:type_name -> rota.v1.MessageSpec
 	18, // 13: rota.v1.PublishBatchResponse.results:type_name -> rota.v1.PublishItemResult
@@ -4893,94 +5142,101 @@ var file_rota_v1_rota_proto_depIdxs = []int32{
 	23, // 18: rota.v1.WorkClientMsg.extend:type_name -> rota.v1.ExtendVisibility
 	24, // 19: rota.v1.WorkClientMsg.complete:type_name -> rota.v1.Complete
 	1,  // 20: rota.v1.Nack.mode:type_name -> rota.v1.NackMode
-	74, // 21: rota.v1.Nack.delay:type_name -> google.protobuf.Duration
-	67, // 22: rota.v1.Nack.failure_meta:type_name -> rota.v1.Nack.FailureMetaEntry
-	74, // 23: rota.v1.ExtendVisibility.ttl:type_name -> google.protobuf.Duration
+	78, // 21: rota.v1.Nack.delay:type_name -> google.protobuf.Duration
+	71, // 22: rota.v1.Nack.failure_meta:type_name -> rota.v1.Nack.FailureMetaEntry
+	78, // 23: rota.v1.ExtendVisibility.ttl:type_name -> google.protobuf.Duration
 	2,  // 24: rota.v1.Complete.outcome:type_name -> rota.v1.Outcome
-	68, // 25: rota.v1.Complete.result_meta:type_name -> rota.v1.Complete.ResultMetaEntry
-	74, // 26: rota.v1.Complete.delay:type_name -> google.protobuf.Duration
+	72, // 25: rota.v1.Complete.result_meta:type_name -> rota.v1.Complete.ResultMetaEntry
+	78, // 26: rota.v1.Complete.delay:type_name -> google.protobuf.Duration
 	26, // 27: rota.v1.WorkServerMsg.lease:type_name -> rota.v1.LeasedMessage
 	27, // 28: rota.v1.WorkServerMsg.credit:type_name -> rota.v1.CreditGrant
 	28, // 29: rota.v1.WorkServerMsg.control:type_name -> rota.v1.ControlFrame
 	29, // 30: rota.v1.WorkServerMsg.error:type_name -> rota.v1.StreamError
-	69, // 31: rota.v1.LeasedMessage.headers:type_name -> rota.v1.LeasedMessage.HeadersEntry
-	75, // 32: rota.v1.LeasedMessage.visibility_deadline:type_name -> google.protobuf.Timestamp
+	73, // 31: rota.v1.LeasedMessage.headers:type_name -> rota.v1.LeasedMessage.HeadersEntry
+	79, // 32: rota.v1.LeasedMessage.visibility_deadline:type_name -> google.protobuf.Timestamp
 	3,  // 33: rota.v1.ControlFrame.kind:type_name -> rota.v1.ControlKind
 	4,  // 34: rota.v1.StreamError.code:type_name -> rota.v1.ErrorCode
-	5,  // 35: rota.v1.PolicySource.kind:type_name -> rota.v1.PolicyKind
-	6,  // 36: rota.v1.PolicySource.mode:type_name -> rota.v1.PolicyMode
-	70, // 37: rota.v1.PolicySource.params:type_name -> rota.v1.PolicySource.ParamsEntry
-	38, // 38: rota.v1.SetPolicyRequest.source:type_name -> rota.v1.PolicySource
-	38, // 39: rota.v1.PolicyInfo.source:type_name -> rota.v1.PolicySource
-	71, // 40: rota.v1.ScheduleCronRequest.headers:type_name -> rota.v1.ScheduleCronRequest.HeadersEntry
-	7,  // 41: rota.v1.ScheduleCronRequest.misfire:type_name -> rota.v1.MisfirePolicy
-	75, // 42: rota.v1.ScheduleCronRequest.start_at:type_name -> google.protobuf.Timestamp
-	75, // 43: rota.v1.ScheduleCronRequest.end_at:type_name -> google.protobuf.Timestamp
-	44, // 44: rota.v1.ListCronResponse.crons:type_name -> rota.v1.CronInfo
-	72, // 45: rota.v1.ListCronResponse.next_fires:type_name -> rota.v1.ListCronResponse.NextFiresEntry
-	74, // 46: rota.v1.AcquireSingletonRequest.ttl:type_name -> google.protobuf.Duration
-	74, // 47: rota.v1.RenewSingletonRequest.ttl:type_name -> google.protobuf.Duration
-	2,  // 48: rota.v1.CompleteByTokenRequest.outcome:type_name -> rota.v1.Outcome
-	73, // 49: rota.v1.CompleteByTokenRequest.result_meta:type_name -> rota.v1.CompleteByTokenRequest.ResultMetaEntry
-	74, // 50: rota.v1.CompleteByTokenRequest.delay:type_name -> google.protobuf.Duration
-	58, // 51: rota.v1.StatsResponse.lanes:type_name -> rota.v1.LaneStats
-	61, // 52: rota.v1.ClusterInfo.peers:type_name -> rota.v1.PeerInfo
-	47, // 53: rota.v1.ListCronResponse.NextFiresEntry.value:type_name -> rota.v1.NextFires
-	14, // 54: rota.v1.Broker.Publish:input_type -> rota.v1.PublishRequest
-	16, // 55: rota.v1.Broker.PublishBatch:input_type -> rota.v1.PublishBatchRequest
-	19, // 56: rota.v1.Broker.Work:input_type -> rota.v1.WorkClientMsg
-	34, // 57: rota.v1.Control.SetGroupConfig:input_type -> rota.v1.SetGroupConfigRequest
-	32, // 58: rota.v1.Control.GetGroupConfig:input_type -> rota.v1.GroupRef
-	32, // 59: rota.v1.Control.PauseGroup:input_type -> rota.v1.GroupRef
-	32, // 60: rota.v1.Control.ResumeGroup:input_type -> rota.v1.GroupRef
-	32, // 61: rota.v1.Control.CancelGroup:input_type -> rota.v1.GroupRef
-	32, // 62: rota.v1.Control.PurgeGroup:input_type -> rota.v1.GroupRef
-	32, // 63: rota.v1.Control.ReapGroup:input_type -> rota.v1.GroupRef
-	36, // 64: rota.v1.Control.TeardownGroup:input_type -> rota.v1.TeardownRequest
-	39, // 65: rota.v1.Control.SetPolicy:input_type -> rota.v1.SetPolicyRequest
-	31, // 66: rota.v1.Control.GetPolicy:input_type -> rota.v1.LaneRef
-	39, // 67: rota.v1.Control.ValidatePolicy:input_type -> rota.v1.SetPolicyRequest
-	42, // 68: rota.v1.Control.ScheduleCron:input_type -> rota.v1.ScheduleCronRequest
-	45, // 69: rota.v1.Control.ListCron:input_type -> rota.v1.ListCronRequest
-	43, // 70: rota.v1.Control.DeleteCron:input_type -> rota.v1.CronRef
-	43, // 71: rota.v1.Control.PauseCron:input_type -> rota.v1.CronRef
-	50, // 72: rota.v1.Control.AcquireSingletonLease:input_type -> rota.v1.AcquireSingletonRequest
-	51, // 73: rota.v1.Control.RenewSingletonLease:input_type -> rota.v1.RenewSingletonRequest
-	52, // 74: rota.v1.Control.ReleaseSingletonLease:input_type -> rota.v1.ReleaseSingletonRequest
-	54, // 75: rota.v1.Control.CompleteByToken:input_type -> rota.v1.CompleteByTokenRequest
-	56, // 76: rota.v1.Control.GetStats:input_type -> rota.v1.GetStatsRequest
-	59, // 77: rota.v1.Control.DescribeCluster:input_type -> rota.v1.DescribeClusterRequest
-	62, // 78: rota.v1.Control.Health:input_type -> rota.v1.HealthRequest
-	15, // 79: rota.v1.Broker.Publish:output_type -> rota.v1.PublishResponse
-	17, // 80: rota.v1.Broker.PublishBatch:output_type -> rota.v1.PublishBatchResponse
-	25, // 81: rota.v1.Broker.Work:output_type -> rota.v1.WorkServerMsg
-	33, // 82: rota.v1.Control.SetGroupConfig:output_type -> rota.v1.GroupConfig
-	33, // 83: rota.v1.Control.GetGroupConfig:output_type -> rota.v1.GroupConfig
-	33, // 84: rota.v1.Control.PauseGroup:output_type -> rota.v1.GroupConfig
-	33, // 85: rota.v1.Control.ResumeGroup:output_type -> rota.v1.GroupConfig
-	35, // 86: rota.v1.Control.CancelGroup:output_type -> rota.v1.GroupOpResult
-	35, // 87: rota.v1.Control.PurgeGroup:output_type -> rota.v1.GroupOpResult
-	35, // 88: rota.v1.Control.ReapGroup:output_type -> rota.v1.GroupOpResult
-	37, // 89: rota.v1.Control.TeardownGroup:output_type -> rota.v1.TeardownResult
-	40, // 90: rota.v1.Control.SetPolicy:output_type -> rota.v1.PolicyInfo
-	40, // 91: rota.v1.Control.GetPolicy:output_type -> rota.v1.PolicyInfo
-	41, // 92: rota.v1.Control.ValidatePolicy:output_type -> rota.v1.ValidatePolicyResult
-	44, // 93: rota.v1.Control.ScheduleCron:output_type -> rota.v1.CronInfo
-	46, // 94: rota.v1.Control.ListCron:output_type -> rota.v1.ListCronResponse
-	48, // 95: rota.v1.Control.DeleteCron:output_type -> rota.v1.CronOpResult
-	44, // 96: rota.v1.Control.PauseCron:output_type -> rota.v1.CronInfo
-	49, // 97: rota.v1.Control.AcquireSingletonLease:output_type -> rota.v1.SingletonLease
-	49, // 98: rota.v1.Control.RenewSingletonLease:output_type -> rota.v1.SingletonLease
-	53, // 99: rota.v1.Control.ReleaseSingletonLease:output_type -> rota.v1.SingletonOpResult
-	55, // 100: rota.v1.Control.CompleteByToken:output_type -> rota.v1.CompleteResult
-	57, // 101: rota.v1.Control.GetStats:output_type -> rota.v1.StatsResponse
-	60, // 102: rota.v1.Control.DescribeCluster:output_type -> rota.v1.ClusterInfo
-	63, // 103: rota.v1.Control.Health:output_type -> rota.v1.HealthResponse
-	79, // [79:104] is the sub-list for method output_type
-	54, // [54:79] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	78, // 35: rota.v1.PauseLaneRequest.duration:type_name -> google.protobuf.Duration
+	5,  // 36: rota.v1.PolicySource.kind:type_name -> rota.v1.PolicyKind
+	6,  // 37: rota.v1.PolicySource.mode:type_name -> rota.v1.PolicyMode
+	74, // 38: rota.v1.PolicySource.params:type_name -> rota.v1.PolicySource.ParamsEntry
+	42, // 39: rota.v1.SetPolicyRequest.source:type_name -> rota.v1.PolicySource
+	42, // 40: rota.v1.PolicyInfo.source:type_name -> rota.v1.PolicySource
+	75, // 41: rota.v1.ScheduleCronRequest.headers:type_name -> rota.v1.ScheduleCronRequest.HeadersEntry
+	7,  // 42: rota.v1.ScheduleCronRequest.misfire:type_name -> rota.v1.MisfirePolicy
+	79, // 43: rota.v1.ScheduleCronRequest.start_at:type_name -> google.protobuf.Timestamp
+	79, // 44: rota.v1.ScheduleCronRequest.end_at:type_name -> google.protobuf.Timestamp
+	48, // 45: rota.v1.ListCronResponse.crons:type_name -> rota.v1.CronInfo
+	76, // 46: rota.v1.ListCronResponse.next_fires:type_name -> rota.v1.ListCronResponse.NextFiresEntry
+	78, // 47: rota.v1.AcquireSingletonRequest.ttl:type_name -> google.protobuf.Duration
+	78, // 48: rota.v1.RenewSingletonRequest.ttl:type_name -> google.protobuf.Duration
+	2,  // 49: rota.v1.CompleteByTokenRequest.outcome:type_name -> rota.v1.Outcome
+	77, // 50: rota.v1.CompleteByTokenRequest.result_meta:type_name -> rota.v1.CompleteByTokenRequest.ResultMetaEntry
+	78, // 51: rota.v1.CompleteByTokenRequest.delay:type_name -> google.protobuf.Duration
+	62, // 52: rota.v1.StatsResponse.lanes:type_name -> rota.v1.LaneStats
+	65, // 53: rota.v1.ClusterInfo.peers:type_name -> rota.v1.PeerInfo
+	51, // 54: rota.v1.ListCronResponse.NextFiresEntry.value:type_name -> rota.v1.NextFires
+	14, // 55: rota.v1.Broker.Publish:input_type -> rota.v1.PublishRequest
+	16, // 56: rota.v1.Broker.PublishBatch:input_type -> rota.v1.PublishBatchRequest
+	19, // 57: rota.v1.Broker.Work:input_type -> rota.v1.WorkClientMsg
+	38, // 58: rota.v1.Control.SetGroupConfig:input_type -> rota.v1.SetGroupConfigRequest
+	32, // 59: rota.v1.Control.GetGroupConfig:input_type -> rota.v1.GroupRef
+	32, // 60: rota.v1.Control.PauseGroup:input_type -> rota.v1.GroupRef
+	32, // 61: rota.v1.Control.ResumeGroup:input_type -> rota.v1.GroupRef
+	32, // 62: rota.v1.Control.CancelGroup:input_type -> rota.v1.GroupRef
+	32, // 63: rota.v1.Control.PurgeGroup:input_type -> rota.v1.GroupRef
+	32, // 64: rota.v1.Control.ReapGroup:input_type -> rota.v1.GroupRef
+	40, // 65: rota.v1.Control.TeardownGroup:input_type -> rota.v1.TeardownRequest
+	34, // 66: rota.v1.Control.SetLaneConfig:input_type -> rota.v1.SetLaneConfigRequest
+	35, // 67: rota.v1.Control.PauseLane:input_type -> rota.v1.PauseLaneRequest
+	31, // 68: rota.v1.Control.ResumeLane:input_type -> rota.v1.LaneRef
+	43, // 69: rota.v1.Control.SetPolicy:input_type -> rota.v1.SetPolicyRequest
+	31, // 70: rota.v1.Control.GetPolicy:input_type -> rota.v1.LaneRef
+	43, // 71: rota.v1.Control.ValidatePolicy:input_type -> rota.v1.SetPolicyRequest
+	46, // 72: rota.v1.Control.ScheduleCron:input_type -> rota.v1.ScheduleCronRequest
+	49, // 73: rota.v1.Control.ListCron:input_type -> rota.v1.ListCronRequest
+	47, // 74: rota.v1.Control.DeleteCron:input_type -> rota.v1.CronRef
+	47, // 75: rota.v1.Control.PauseCron:input_type -> rota.v1.CronRef
+	54, // 76: rota.v1.Control.AcquireSingletonLease:input_type -> rota.v1.AcquireSingletonRequest
+	55, // 77: rota.v1.Control.RenewSingletonLease:input_type -> rota.v1.RenewSingletonRequest
+	56, // 78: rota.v1.Control.ReleaseSingletonLease:input_type -> rota.v1.ReleaseSingletonRequest
+	58, // 79: rota.v1.Control.CompleteByToken:input_type -> rota.v1.CompleteByTokenRequest
+	60, // 80: rota.v1.Control.GetStats:input_type -> rota.v1.GetStatsRequest
+	63, // 81: rota.v1.Control.DescribeCluster:input_type -> rota.v1.DescribeClusterRequest
+	66, // 82: rota.v1.Control.Health:input_type -> rota.v1.HealthRequest
+	15, // 83: rota.v1.Broker.Publish:output_type -> rota.v1.PublishResponse
+	17, // 84: rota.v1.Broker.PublishBatch:output_type -> rota.v1.PublishBatchResponse
+	25, // 85: rota.v1.Broker.Work:output_type -> rota.v1.WorkServerMsg
+	37, // 86: rota.v1.Control.SetGroupConfig:output_type -> rota.v1.GroupConfig
+	37, // 87: rota.v1.Control.GetGroupConfig:output_type -> rota.v1.GroupConfig
+	37, // 88: rota.v1.Control.PauseGroup:output_type -> rota.v1.GroupConfig
+	37, // 89: rota.v1.Control.ResumeGroup:output_type -> rota.v1.GroupConfig
+	39, // 90: rota.v1.Control.CancelGroup:output_type -> rota.v1.GroupOpResult
+	39, // 91: rota.v1.Control.PurgeGroup:output_type -> rota.v1.GroupOpResult
+	39, // 92: rota.v1.Control.ReapGroup:output_type -> rota.v1.GroupOpResult
+	41, // 93: rota.v1.Control.TeardownGroup:output_type -> rota.v1.TeardownResult
+	33, // 94: rota.v1.Control.SetLaneConfig:output_type -> rota.v1.LaneConfig
+	36, // 95: rota.v1.Control.PauseLane:output_type -> rota.v1.LaneOpResult
+	36, // 96: rota.v1.Control.ResumeLane:output_type -> rota.v1.LaneOpResult
+	44, // 97: rota.v1.Control.SetPolicy:output_type -> rota.v1.PolicyInfo
+	44, // 98: rota.v1.Control.GetPolicy:output_type -> rota.v1.PolicyInfo
+	45, // 99: rota.v1.Control.ValidatePolicy:output_type -> rota.v1.ValidatePolicyResult
+	48, // 100: rota.v1.Control.ScheduleCron:output_type -> rota.v1.CronInfo
+	50, // 101: rota.v1.Control.ListCron:output_type -> rota.v1.ListCronResponse
+	52, // 102: rota.v1.Control.DeleteCron:output_type -> rota.v1.CronOpResult
+	48, // 103: rota.v1.Control.PauseCron:output_type -> rota.v1.CronInfo
+	53, // 104: rota.v1.Control.AcquireSingletonLease:output_type -> rota.v1.SingletonLease
+	53, // 105: rota.v1.Control.RenewSingletonLease:output_type -> rota.v1.SingletonLease
+	57, // 106: rota.v1.Control.ReleaseSingletonLease:output_type -> rota.v1.SingletonOpResult
+	59, // 107: rota.v1.Control.CompleteByToken:output_type -> rota.v1.CompleteResult
+	61, // 108: rota.v1.Control.GetStats:output_type -> rota.v1.StatsResponse
+	64, // 109: rota.v1.Control.DescribeCluster:output_type -> rota.v1.ClusterInfo
+	67, // 110: rota.v1.Control.Health:output_type -> rota.v1.HealthResponse
+	83, // [83:111] is the sub-list for method output_type
+	55, // [55:83] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_rota_v1_rota_proto_init() }
@@ -5005,14 +5261,14 @@ func file_rota_v1_rota_proto_init() {
 		(*WorkServerMsg_Control)(nil),
 		(*WorkServerMsg_Error)(nil),
 	}
-	file_rota_v1_rota_proto_msgTypes[26].OneofWrappers = []any{}
+	file_rota_v1_rota_proto_msgTypes[30].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rota_v1_rota_proto_rawDesc), len(file_rota_v1_rota_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   66,
+			NumMessages:   70,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

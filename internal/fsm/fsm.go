@@ -86,6 +86,12 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyComplete(b, cmd.Complete)
 	case CmdSingleton:
 		res, err = f.applySingleton(b, cmd.Singleton)
+	case CmdSetLaneConfig:
+		res, err = f.applySetLaneConfig(b, cmd.LaneConfig)
+	case CmdReapGroup:
+		res, err = f.applyReapGroup(b, cmd.ReapGroup)
+	case CmdTeardownGroup:
+		res, err = f.applyTeardownGroup(b, cmd.Teardown)
 	}
 	if err != nil {
 		return err

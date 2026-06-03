@@ -73,6 +73,7 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 	consumerID := "consumer"
 	credit := 0
 	inflight := 0
+	lastPaused := false
 
 	recvCh := make(chan *rotav1.WorkClientMsg, 16)
 	errCh := make(chan error, 1)
@@ -135,6 +136,21 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 				_ = b.n.Extend(x.Extend.GetLeaseId(), ttl)
 			}
 		case <-ticker.C:
+		}
+
+		// Tell the consumer to back off (or resume) when the lane's pause flips,
+		// so a circuit breaker driving PauseLane is observable, not just silent.
+		if lane != "" {
+			if paused := b.n.LanePaused(lane); paused != lastPaused {
+				lastPaused = paused
+				kind := rotav1.ControlKind_RESUME_LANE
+				if paused {
+					kind = rotav1.ControlKind_PAUSE_LANE
+				}
+				_ = stream.Send(&rotav1.WorkServerMsg{Msg: &rotav1.WorkServerMsg_Control{
+					Control: &rotav1.ControlFrame{Kind: kind, Lane: lane},
+				}})
+			}
 		}
 
 		// Deliver while we have credit and there is fair work to hand out.

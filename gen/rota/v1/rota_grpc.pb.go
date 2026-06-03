@@ -217,6 +217,9 @@ const (
 	Control_PurgeGroup_FullMethodName            = "/rota.v1.Control/PurgeGroup"
 	Control_ReapGroup_FullMethodName             = "/rota.v1.Control/ReapGroup"
 	Control_TeardownGroup_FullMethodName         = "/rota.v1.Control/TeardownGroup"
+	Control_SetLaneConfig_FullMethodName         = "/rota.v1.Control/SetLaneConfig"
+	Control_PauseLane_FullMethodName             = "/rota.v1.Control/PauseLane"
+	Control_ResumeLane_FullMethodName            = "/rota.v1.Control/ResumeLane"
 	Control_SetPolicy_FullMethodName             = "/rota.v1.Control/SetPolicy"
 	Control_GetPolicy_FullMethodName             = "/rota.v1.Control/GetPolicy"
 	Control_ValidatePolicy_FullMethodName        = "/rota.v1.Control/ValidatePolicy"
@@ -250,6 +253,10 @@ type ControlClient interface {
 	PurgeGroup(ctx context.Context, in *GroupRef, opts ...grpc.CallOption) (*GroupOpResult, error)
 	ReapGroup(ctx context.Context, in *GroupRef, opts ...grpc.CallOption) (*GroupOpResult, error)
 	TeardownGroup(ctx context.Context, in *TeardownRequest, opts ...grpc.CallOption) (*TeardownResult, error)
+	// Lane configuration + back-pressure hooks.
+	SetLaneConfig(ctx context.Context, in *SetLaneConfigRequest, opts ...grpc.CallOption) (*LaneConfig, error)
+	PauseLane(ctx context.Context, in *PauseLaneRequest, opts ...grpc.CallOption) (*LaneOpResult, error)
+	ResumeLane(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*LaneOpResult, error)
 	// Programmable policy (hot-reloadable).
 	SetPolicy(ctx context.Context, in *SetPolicyRequest, opts ...grpc.CallOption) (*PolicyInfo, error)
 	GetPolicy(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*PolicyInfo, error)
@@ -353,6 +360,36 @@ func (c *controlClient) TeardownGroup(ctx context.Context, in *TeardownRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TeardownResult)
 	err := c.cc.Invoke(ctx, Control_TeardownGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) SetLaneConfig(ctx context.Context, in *SetLaneConfigRequest, opts ...grpc.CallOption) (*LaneConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LaneConfig)
+	err := c.cc.Invoke(ctx, Control_SetLaneConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) PauseLane(ctx context.Context, in *PauseLaneRequest, opts ...grpc.CallOption) (*LaneOpResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LaneOpResult)
+	err := c.cc.Invoke(ctx, Control_PauseLane_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) ResumeLane(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*LaneOpResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LaneOpResult)
+	err := c.cc.Invoke(ctx, Control_ResumeLane_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -516,6 +553,10 @@ type ControlServer interface {
 	PurgeGroup(context.Context, *GroupRef) (*GroupOpResult, error)
 	ReapGroup(context.Context, *GroupRef) (*GroupOpResult, error)
 	TeardownGroup(context.Context, *TeardownRequest) (*TeardownResult, error)
+	// Lane configuration + back-pressure hooks.
+	SetLaneConfig(context.Context, *SetLaneConfigRequest) (*LaneConfig, error)
+	PauseLane(context.Context, *PauseLaneRequest) (*LaneOpResult, error)
+	ResumeLane(context.Context, *LaneRef) (*LaneOpResult, error)
 	// Programmable policy (hot-reloadable).
 	SetPolicy(context.Context, *SetPolicyRequest) (*PolicyInfo, error)
 	GetPolicy(context.Context, *LaneRef) (*PolicyInfo, error)
@@ -568,6 +609,15 @@ func (UnimplementedControlServer) ReapGroup(context.Context, *GroupRef) (*GroupO
 }
 func (UnimplementedControlServer) TeardownGroup(context.Context, *TeardownRequest) (*TeardownResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method TeardownGroup not implemented")
+}
+func (UnimplementedControlServer) SetLaneConfig(context.Context, *SetLaneConfigRequest) (*LaneConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetLaneConfig not implemented")
+}
+func (UnimplementedControlServer) PauseLane(context.Context, *PauseLaneRequest) (*LaneOpResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseLane not implemented")
+}
+func (UnimplementedControlServer) ResumeLane(context.Context, *LaneRef) (*LaneOpResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeLane not implemented")
 }
 func (UnimplementedControlServer) SetPolicy(context.Context, *SetPolicyRequest) (*PolicyInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetPolicy not implemented")
@@ -772,6 +822,60 @@ func _Control_TeardownGroup_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlServer).TeardownGroup(ctx, req.(*TeardownRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_SetLaneConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetLaneConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).SetLaneConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_SetLaneConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).SetLaneConfig(ctx, req.(*SetLaneConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_PauseLane_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseLaneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).PauseLane(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_PauseLane_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).PauseLane(ctx, req.(*PauseLaneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_ResumeLane_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LaneRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).ResumeLane(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_ResumeLane_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).ResumeLane(ctx, req.(*LaneRef))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1066,6 +1170,18 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TeardownGroup",
 			Handler:    _Control_TeardownGroup_Handler,
+		},
+		{
+			MethodName: "SetLaneConfig",
+			Handler:    _Control_SetLaneConfig_Handler,
+		},
+		{
+			MethodName: "PauseLane",
+			Handler:    _Control_PauseLane_Handler,
+		},
+		{
+			MethodName: "ResumeLane",
+			Handler:    _Control_ResumeLane_Handler,
 		},
 		{
 			MethodName: "SetPolicy",

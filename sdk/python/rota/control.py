@@ -88,6 +88,28 @@ class Control:
         """Tear a group down across ALL lanes in one call."""
         return self._call("TeardownGroup", pb.TeardownRequest(group_id=group_id))
 
+    # -- lane config + back-pressure ---------------------------------------
+
+    def set_lane_config(
+        self, lane: str, *, rate_per_sec: float = 0.0, burst: int = 0
+    ) -> pb.LaneConfig:
+        """Set a lane's dequeue rate limit. ``rate_per_sec`` <= 0 means unlimited."""
+        return self._call(
+            "SetLaneConfig",
+            pb.SetLaneConfigRequest(lane=lane, rate_per_sec=rate_per_sec, burst=burst),
+        )
+
+    def pause_lane(self, lane: str, duration: float = 0.0) -> pb.LaneOpResult:
+        """Stop leasing a lane. ``duration`` in seconds; 0 = until ``resume_lane``."""
+        req = pb.PauseLaneRequest(lane=lane)
+        if duration:
+            req.duration.CopyFrom(to_duration(duration))
+        return self._call("PauseLane", req)
+
+    def resume_lane(self, lane: str) -> pb.LaneOpResult:
+        """Resume leasing a paused lane."""
+        return self._call("ResumeLane", pb.LaneRef(lane=lane))
+
     # -- policy -------------------------------------------------------------
 
     def set_policy(

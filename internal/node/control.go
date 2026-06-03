@@ -1,15 +1,21 @@
 package node
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/hashicorp/raft"
 	"github.com/robfig/cron/v3"
+	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/proto"
 
+	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/fsm"
 	"github.com/tinkerhaus/rota/internal/storage"
 )
@@ -190,4 +196,162 @@ func (n *Node) ReleaseSingleton(name, holder string, fence uint64) (bool, error)
 		return r.OK, nil
 	}
 	return false, nil
+}
+
+// ─── Lane rate-limit + dequeue-pause (back-pressure hooks) ──────────────────────
+
+// SetLaneRateLimit replicates a lane's dequeue rate limit and rebuilds this
+// leader's token bucket. ratePerSec <= 0 means unlimited.
+func (n *Node) SetLaneRateLimit(lane string, ratePerSec float64, burst uint32) error {
+	if _, err := n.apply(fsm.Command{Type: fsm.CmdSetLaneConfig, LaneConfig: &fsm.LaneConfigCmd{
+		Lane: lane, RatePerSec: ratePerSec, Burst: burst,
+	}}); err != nil {
+		return err
+	}
+	n.ensureLaneConfig(lane)
+	return nil
+}
+
+// PauseLane stops leasing from a lane for durMs (0 = until ResumeLane). This is
+// the hook a consumer-side circuit breaker drives; it is leader-local.
+func (n *Node) PauseLane(lane string, durMs uint64) {
+	n.laneMu.Lock()
+	defer n.laneMu.Unlock()
+	if durMs == 0 {
+		n.paused[lane] = math.MaxInt64
+	} else {
+		n.paused[lane] = int64(nowMs()) + int64(durMs)
+	}
+}
+
+func (n *Node) ResumeLane(lane string) {
+	n.laneMu.Lock()
+	defer n.laneMu.Unlock()
+	delete(n.paused, lane)
+}
+
+func (n *Node) LanePaused(lane string) bool {
+	n.laneMu.Lock()
+	defer n.laneMu.Unlock()
+	until, ok := n.paused[lane]
+	return ok && int64(nowMs()) < until
+}
+
+// laneGate reports whether leasing from a lane is currently allowed (not paused
+// and within its dequeue rate limit). It consumes a rate token when it returns true.
+func (n *Node) laneGate(lane string) bool {
+	n.ensureLaneConfig(lane)
+	n.laneMu.Lock()
+	defer n.laneMu.Unlock()
+	if until, ok := n.paused[lane]; ok {
+		if int64(nowMs()) < until {
+			return false
+		}
+		delete(n.paused, lane)
+	}
+	if lim := n.limiters[lane]; lim != nil {
+		return lim.Allow()
+	}
+	return true
+}
+
+// ensureLaneConfig lazily (re)builds this leader's rate limiter from the
+// replicated lane config (so a new leader picks up limits set while a follower).
+func (n *Node) ensureLaneConfig(lane string) {
+	raw, ok, err := n.store.GetRaw(storage.LaneConfigKey(lane))
+	if err != nil {
+		return
+	}
+	n.laneMu.Lock()
+	defer n.laneMu.Unlock()
+	if !ok {
+		if _, had := n.loadedLaneCfg[lane]; had {
+			delete(n.limiters, lane)
+			delete(n.loadedLaneCfg, lane)
+		}
+		return
+	}
+	var rec fsm.LaneConfigRec
+	if json.Unmarshal(raw, &rec) != nil {
+		return
+	}
+	if cur, had := n.loadedLaneCfg[lane]; had && cur == rec {
+		return
+	}
+	n.loadedLaneCfg[lane] = rec
+	if rec.RatePerSec <= 0 {
+		delete(n.limiters, lane)
+		return
+	}
+	burst := int(rec.Burst)
+	if burst < 1 {
+		burst = 1
+	}
+	n.limiters[lane] = rate.NewLimiter(rate.Limit(rec.RatePerSec), burst)
+}
+
+// ─── Idle reap + teardown ───────────────────────────────────────────────────────
+
+func (n *Node) ReapGroup(lane, group string) (bool, error) {
+	res, err := n.apply(fsm.Command{Type: fsm.CmdReapGroup, ReapGroup: &fsm.ReapGroupCmd{Lane: lane, GroupID: group}})
+	if err != nil {
+		return false, err
+	}
+	if r, ok := res.(*fsm.GroupOpResult); ok {
+		return r.Affected > 0, nil
+	}
+	return false, nil
+}
+
+func (n *Node) TeardownGroup(group string) ([]string, uint64, error) {
+	res, err := n.apply(fsm.Command{Type: fsm.CmdTeardownGroup, Teardown: &fsm.TeardownCmd{GroupID: group}})
+	if err != nil {
+		return nil, 0, err
+	}
+	if r, ok := res.(*fsm.TeardownResult); ok {
+		return r.AffectedLanes, r.Affected, nil
+	}
+	return nil, 0, nil
+}
+
+// reapLoop is a leader-only sweep that reaps fully-drained, idle groups so their
+// metadata rows don't accumulate.
+func (n *Node) reapLoop(ctx context.Context) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if n.cfg.IdleReapMs == 0 || n.raft.State() != raft.Leader {
+			continue
+		}
+		n.reapSweep()
+	}
+}
+
+func (n *Node) reapSweep() {
+	now := nowMs()
+	lo, hi := storage.GroupMetaBounds()
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return
+	}
+	type tg struct{ lane, group string }
+	var targets []tg
+	for it.First(); it.Valid(); it.Next() {
+		gm := &rotav1.GroupMeta{}
+		if proto.Unmarshal(it.Value(), gm) != nil {
+			continue
+		}
+		if gm.TotalCount == 0 && gm.LastActivityMs > 0 && now-gm.LastActivityMs > n.cfg.IdleReapMs {
+			targets = append(targets, tg{gm.Lane, gm.GroupId})
+		}
+	}
+	_ = it.Close()
+	for _, t := range targets {
+		_, _ = n.ReapGroup(t.lane, t.group)
+	}
 }

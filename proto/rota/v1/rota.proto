@@ -42,6 +42,11 @@ service Control {
   rpc ReapGroup(GroupRef) returns (GroupOpResult);      // idle-reap (asserts empty)
   rpc TeardownGroup(TeardownRequest) returns (TeardownResult); // one call across ALL lanes
 
+  // Lane configuration + back-pressure hooks.
+  rpc SetLaneConfig(SetLaneConfigRequest) returns (LaneConfig);
+  rpc PauseLane(PauseLaneRequest) returns (LaneOpResult);   // stop leasing a lane (circuit breaker hook)
+  rpc ResumeLane(LaneRef) returns (LaneOpResult);
+
   // Programmable policy (hot-reloadable).
   rpc SetPolicy(SetPolicyRequest) returns (PolicyInfo);
   rpc GetPolicy(LaneRef) returns (PolicyInfo);
@@ -314,6 +319,23 @@ message NotLeader {
 
 message LaneRef { string lane = 1; }
 message GroupRef { string lane = 1; string group_id = 2; }
+
+message LaneConfig {
+  string lane = 1;
+  double rate_per_sec = 2; // broker-side dequeue rate limit; 0 = unlimited
+  uint32 burst = 3;
+  bool paused = 4;
+}
+message SetLaneConfigRequest {
+  string lane = 1;
+  double rate_per_sec = 2;
+  uint32 burst = 3;
+}
+message PauseLaneRequest {
+  string lane = 1;
+  google.protobuf.Duration duration = 2; // 0 = until explicitly resumed
+}
+message LaneOpResult { bool ok = 1; }
 
 message GroupConfig {
   string lane = 1;

@@ -6,18 +6,19 @@ package storage
 import "encoding/binary"
 
 const (
-	tagMeta      byte = 0x00
-	tagMessage   byte = 0x01
-	tagGroupMeta byte = 0x02
-	tagLease     byte = 0x03
-	tagTimeIndex byte = 0x04
-	tagDLQ       byte = 0x05
-	tagPolicy    byte = 0x06
-	tagCron      byte = 0x07
-	tagSingleton byte = 0x08
-	tagToken     byte = 0x09
-	tagRaftLog   byte = 0xFE
-	tagRaftKV    byte = 0xFF
+	tagMeta       byte = 0x00
+	tagMessage    byte = 0x01
+	tagGroupMeta  byte = 0x02
+	tagLease      byte = 0x03
+	tagTimeIndex  byte = 0x04
+	tagDLQ        byte = 0x05
+	tagPolicy     byte = 0x06
+	tagCron       byte = 0x07
+	tagSingleton  byte = 0x08
+	tagToken      byte = 0x09
+	tagLaneConfig byte = 0x0A
+	tagRaftLog    byte = 0xFE
+	tagRaftKV     byte = 0xFF
 )
 
 // Timer kinds carried in the time index. The same ordered structure drives
@@ -177,10 +178,13 @@ func SingletonKey(name string) []byte { return append([]byte{tagSingleton}, name
 // TokenKey: 0x09 ++ token_hash (sha256) — maps a completion token to a lease id.
 func TokenKey(hash []byte) []byte { return append([]byte{tagToken}, hash...) }
 
+// LaneConfigKey: 0x0A ++ lane — the lane's replicated rate-limit config.
+func LaneConfigKey(lane string) []byte { return append([]byte{tagLaneConfig}, lane...) }
+
 // AppKeyspaceBounds returns the [lo, hi) range covering all application tables
 // (everything EXCEPT the raft log/stable store at 0xFE/0xFF). Used by FSM
 // snapshots so a snapshot/restore never clobbers a node's own raft log.
-func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagToken + 1} }
+func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagLaneConfig + 1} }
 
 // CronDueRef / ParseCronDueRef encode a cron timer's target spec.
 func CronDueRef(cronID string) []byte   { return []byte(cronID) }

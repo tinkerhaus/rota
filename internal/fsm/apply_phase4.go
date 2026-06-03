@@ -31,6 +31,63 @@ type SingletonRec struct {
 	Fence      uint64 `json:"f"`
 }
 
+// LaneConfigRec is the replicated lane rate-limit config.
+type LaneConfigRec struct {
+	RatePerSec float64 `json:"r"`
+	Burst      uint32  `json:"b"`
+}
+
+func (f *FSM) applySetLaneConfig(b *pebble.Batch, c *LaneConfigCmd) (interface{}, error) {
+	data, _ := json.Marshal(LaneConfigRec{RatePerSec: c.RatePerSec, Burst: c.Burst})
+	return nil, b.Set(storage.LaneConfigKey(c.Lane), data, nil)
+}
+
+// applyReapGroup deletes a group's metadata only if it is fully drained
+// (total_count == 0). Idempotent: a re-proposed reap on a now-repopulated group
+// is a no-op.
+func (f *FSM) applyReapGroup(b *pebble.Batch, c *ReapGroupCmd) (interface{}, error) {
+	gm := &rotav1.GroupMeta{}
+	found, _ := f.s.GetProto(storage.GroupMetaKey(c.Lane, c.GroupID), gm)
+	if !found || gm.TotalCount != 0 {
+		return &GroupOpResult{}, nil
+	}
+	return &GroupOpResult{Affected: 1}, b.Delete(storage.GroupMetaKey(c.Lane, c.GroupID), nil)
+}
+
+// applyTeardownGroup drops a group across every lane it appears in (one call).
+func (f *FSM) applyTeardownGroup(b *pebble.Batch, c *TeardownCmd) (interface{}, error) {
+	lo, hi := storage.GroupMetaBounds()
+	it, err := f.s.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return nil, err
+	}
+	var lanes []string
+	for it.First(); it.Valid(); it.Next() {
+		gm := &rotav1.GroupMeta{}
+		if proto.Unmarshal(it.Value(), gm) == nil && gm.GroupId == c.GroupID {
+			lanes = append(lanes, gm.Lane)
+		}
+	}
+	_ = it.Close()
+
+	var affected uint64
+	for _, lane := range lanes {
+		gm := &rotav1.GroupMeta{}
+		if ok, _ := f.s.GetProto(storage.GroupMetaKey(lane, c.GroupID), gm); !ok {
+			continue
+		}
+		d, err := f.dropLeasable(b, lane, c.GroupID, gm)
+		if err != nil {
+			return nil, err
+		}
+		affected += d
+		if err := b.Delete(storage.GroupMetaKey(lane, c.GroupID), nil); err != nil {
+			return nil, err
+		}
+	}
+	return &TeardownResult{AffectedLanes: lanes, Affected: affected}, nil
+}
+
 func (f *FSM) applyGroupConfig(b *pebble.Batch, c *GroupConfigCmd) (interface{}, error) {
 	gm := &rotav1.GroupMeta{}
 	found, _ := f.s.GetProto(storage.GroupMetaKey(c.Lane, c.GroupID), gm)
