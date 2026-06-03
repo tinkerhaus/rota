@@ -5,8 +5,27 @@ broker-native fair scheduler**. Rota exists because off-the-shelf brokers (Rabbi
 notion of *fairness across groups*: a large backlog for one group head-of-line-blocks everyone else.
 Rota makes the **group** the unit of fairness and lets you define the scheduling **policy as code**.
 
-> Status: design complete, implementation starting (Phase 0). See [`DESIGN.md`](DESIGN.md),
-> the ADRs in [`docs/adr/`](docs/adr/), and the [`ROADMAP.md`](ROADMAP.md). Nothing is stable yet.
+> Status: Phases 0–4 implemented and tested (fair scheduling, lease lifecycle + timers, retry/DLQ,
+> TCP cluster HA + failover + snapshots, the programmable CEL/WASM policy engine, cron, complete-by-token,
+> singleton leases, group lifecycle, the Control gRPC plane, Prometheus metrics, and a Python SDK). See
+> [`DESIGN.md`](DESIGN.md), the ADRs in [`docs/adr/`](docs/adr/), and the [`ROADMAP.md`](ROADMAP.md).
+> Build with `go build ./...`, test with `go test ./...`, try it with `go run ./cmd/rota demo`.
+> Pre-production: APIs may still change.
+
+## Quickstart
+
+```bash
+go run ./cmd/rota demo                 # self-contained fairness demo (500-vs-20)
+go run ./cmd/rota serve --grpc :7100   # run a node (Broker+Control on :7100, metrics on :7101)
+```
+
+Python (see [`sdk/python`](sdk/python)):
+
+```python
+from rota import Publisher, Worker
+Publisher("127.0.0.1:7100").publish("orders", group_id="tenant-A", payload=b"...")
+Worker("127.0.0.1:7100", "orders", handler=lambda m: print(m.payload)).run()
+```
 
 ## What it is (and is not)
 
