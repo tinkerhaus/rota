@@ -5,8 +5,10 @@ import "hash/fnv"
 // builtinWFQ is the default: weighted-fair, no head-of-line blocking.
 type builtinWFQ struct{}
 
-func (builtinWFQ) Score(l LaneView, _ ConsumerView) ([]float64, error) { return WFQScores(l.Groups), nil }
-func (builtinWFQ) Close()                                              {}
+func (builtinWFQ) Score(l LaneView, _ ConsumerView) ([]float64, error) {
+	return WFQScores(l.Groups), nil
+}
+func (builtinWFQ) Close() {}
 
 // builtinStrict serves higher-weight groups first (strict priority by weight),
 // staying fair (by virtual time) within a weight tier. A heavy group can starve

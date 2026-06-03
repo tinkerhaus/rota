@@ -12,6 +12,39 @@ const (
 	CmdExtend
 	CmdFireTimer
 	CmdSetPolicy
+	CmdGroupConfig
+	CmdGroupLifecycle
+	CmdCron
+	CmdFireCron
+	CmdIssueToken
+	CmdComplete
+	CmdSingleton
+)
+
+type GroupOp uint8
+
+const (
+	GroupPause GroupOp = iota
+	GroupResume
+	GroupCancel
+	GroupPurge
+)
+
+type CronOp uint8
+
+const (
+	CronSchedule CronOp = iota
+	CronDelete
+	CronPause
+	CronResume
+)
+
+type SingletonOp uint8
+
+const (
+	SingletonAcquire SingletonOp = iota
+	SingletonRenew
+	SingletonRelease
 )
 
 // NackMode mirrors rota.v1.NackMode.
@@ -32,6 +65,78 @@ type Command struct {
 	Extend  *ExtendCmd    `json:"e,omitempty"`
 	Fire    *FireTimerCmd `json:"f,omitempty"`
 	Policy  *PolicyCmd    `json:"pol,omitempty"`
+
+	GroupConfig    *GroupConfigCmd    `json:"gc,omitempty"`
+	GroupLifecycle *GroupLifecycleCmd `json:"gl,omitempty"`
+	Cron           *CronCmd           `json:"cr,omitempty"`
+	FireCron       *FireCronCmd       `json:"fc,omitempty"`
+	IssueToken     *IssueTokenCmd     `json:"it,omitempty"`
+	Complete       *CompleteCmd       `json:"cp,omitempty"`
+	Singleton      *SingletonCmd      `json:"sg,omitempty"`
+}
+
+type GroupConfigCmd struct {
+	Lane      string   `json:"lane"`
+	GroupID   string   `json:"g"`
+	Weight    *float64 `json:"w,omitempty"`
+	BatchSize *uint32  `json:"bs,omitempty"`
+}
+
+type GroupLifecycleCmd struct {
+	Lane    string  `json:"lane"`
+	GroupID string  `json:"g"`
+	Op      GroupOp `json:"op"`
+}
+
+type CronCmd struct {
+	Op         CronOp            `json:"op"`
+	CronID     string            `json:"id"`
+	Lane       string            `json:"lane,omitempty"`
+	GroupID    string            `json:"g,omitempty"`
+	Payload    []byte            `json:"pl,omitempty"`
+	Headers    map[string]string `json:"h,omitempty"`
+	Schedule   string            `json:"s,omitempty"`
+	NextFireMs uint64            `json:"nf,omitempty"`
+	NowMs      uint64            `json:"now,omitempty"`
+}
+
+type FireCronCmd struct {
+	CronID     string `json:"id"`
+	FireAt     uint64 `json:"fa"`
+	NextFireMs uint64 `json:"nf"`
+}
+
+type IssueTokenCmd struct {
+	LeaseID   uint64 `json:"lid"`
+	TokenHash []byte `json:"th"`
+}
+
+type CompleteCmd struct {
+	TokenHash []byte            `json:"th"`
+	Success   bool              `json:"ok"`
+	Meta      map[string]string `json:"m,omitempty"`
+	NowMs     uint64            `json:"now"`
+}
+
+type SingletonCmd struct {
+	Op     SingletonOp `json:"op"`
+	Name   string      `json:"n"`
+	Holder string      `json:"h"`
+	TTLms  uint64      `json:"ttl,omitempty"`
+	Fence  uint64      `json:"f,omitempty"`
+	NowMs  uint64      `json:"now"`
+}
+
+type GroupOpResult struct{ Affected uint64 }
+type SingletonResult struct {
+	OK     bool
+	Fence  uint64
+	Holder string
+}
+type CompleteResult struct {
+	OK           bool
+	DeadLettered bool
+	Unknown      bool
 }
 
 // PolicyCmd installs a lane's policy binding (replicated as config; the leader

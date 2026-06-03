@@ -33,6 +33,12 @@ func New(s *storage.Store) (*FSM, error) {
 	return f, nil
 }
 
+func (f *FSM) AppliedIndex() uint64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.appliedIndex
+}
+
 func (f *FSM) Apply(l *raft.Log) interface{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -66,6 +72,20 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyFireTimer(b, cmd.Fire)
 	case CmdSetPolicy:
 		err = b.Set(storage.PolicyKey(cmd.Policy.Lane), cmd.Policy.Binding, nil)
+	case CmdGroupConfig:
+		res, err = f.applyGroupConfig(b, cmd.GroupConfig)
+	case CmdGroupLifecycle:
+		res, err = f.applyGroupLifecycle(b, cmd.GroupLifecycle)
+	case CmdCron:
+		res, err = f.applyCron(b, cmd.Cron)
+	case CmdFireCron:
+		res, err = f.applyFireCron(b, cmd.FireCron)
+	case CmdIssueToken:
+		res, err = f.applyIssueToken(b, cmd.IssueToken)
+	case CmdComplete:
+		res, err = f.applyComplete(b, cmd.Complete)
+	case CmdSingleton:
+		res, err = f.applySingleton(b, cmd.Singleton)
 	}
 	if err != nil {
 		return err

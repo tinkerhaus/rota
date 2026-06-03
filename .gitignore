@@ -25,3 +25,9 @@ go.work.sum
 .idea/
 .vscode/
 *.swp
+
+# Python SDK
+sdk/python/.venv/
+sdk/python/**/__pycache__/
+sdk/python/*.egg-info/
+sdk/python/**/*.egg-info/

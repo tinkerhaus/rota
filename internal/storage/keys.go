@@ -13,6 +13,9 @@ const (
 	tagTimeIndex byte = 0x04
 	tagDLQ       byte = 0x05
 	tagPolicy    byte = 0x06
+	tagCron      byte = 0x07
+	tagSingleton byte = 0x08
+	tagToken     byte = 0x09
 	tagRaftLog   byte = 0xFE
 	tagRaftKV    byte = 0xFF
 )
@@ -83,6 +86,9 @@ func GroupMetaLanePrefix(lane string) []byte {
 	k := []byte{tagGroupMeta}
 	return append(k, lp(lane)...)
 }
+
+// GroupMetaBounds: the [lo, hi) range over ALL group-meta rows (every lane).
+func GroupMetaBounds() (lo, hi []byte) { return []byte{tagGroupMeta}, []byte{tagGroupMeta + 1} }
 
 // LeaseKey: 0x03 ++ u64be(leaseID)
 func LeaseKey(leaseID uint64) []byte {
@@ -159,10 +165,26 @@ func PolicyKey(lane string) []byte {
 	return append([]byte{tagPolicy}, lp(lane)...)
 }
 
+// CronKey: 0x07 ++ cron_id
+func CronKey(cronID string) []byte { return append([]byte{tagCron}, cronID...) }
+
+// CronPrefix: all cron specs (for listing).
+func CronPrefix() []byte { return []byte{tagCron} }
+
+// SingletonKey: 0x08 ++ name
+func SingletonKey(name string) []byte { return append([]byte{tagSingleton}, name...) }
+
+// TokenKey: 0x09 ++ token_hash (sha256) — maps a completion token to a lease id.
+func TokenKey(hash []byte) []byte { return append([]byte{tagToken}, hash...) }
+
 // AppKeyspaceBounds returns the [lo, hi) range covering all application tables
 // (everything EXCEPT the raft log/stable store at 0xFE/0xFF). Used by FSM
 // snapshots so a snapshot/restore never clobbers a node's own raft log.
-func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagPolicy + 1} }
+func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagToken + 1} }
+
+// CronDueRef / ParseCronDueRef encode a cron timer's target spec.
+func CronDueRef(cronID string) []byte   { return []byte(cronID) }
+func ParseCronDueRef(ref []byte) string { return string(ref) }
 
 // RaftLogKey / RaftLogPrefix: 0xFE ++ u64be(index)
 func RaftLogKey(index uint64) []byte { return append([]byte{tagRaftLog}, u64be(index)...) }

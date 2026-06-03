@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/raft"
 
 	"github.com/tinkerhaus/rota/internal/fsm"
+	"github.com/tinkerhaus/rota/internal/observe"
 	"github.com/tinkerhaus/rota/internal/policy"
 	"github.com/tinkerhaus/rota/internal/raftpebble"
 	"github.com/tinkerhaus/rota/internal/scheduler"
@@ -234,6 +235,7 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 	if pr == nil {
 		return 0, fmt.Errorf("publish: no result")
 	}
+	observe.Publishes.Inc()
 	return pr.MsgID, nil
 }
 
@@ -245,7 +247,7 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	}
 	active := make([]scheduler.GroupStat, 0, len(groups))
 	for _, g := range groups {
-		if g.Ready > 0 {
+		if g.Ready > 0 && !g.Paused {
 			active = append(active, scheduler.GroupStat{
 				ID: g.ID, Backlog: int(g.Ready), InFlight: int(g.InFlight), Weight: g.Weight,
 			})
@@ -254,9 +256,12 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	if len(active) == 0 {
 		return nil, false, nil
 	}
-	gid, _, ok := n.sched.Pick(lane, active, int64(nowMs()))
+	gid, usedFallback, ok := n.sched.Pick(lane, active, int64(nowMs()))
 	if !ok {
 		return nil, false, nil
+	}
+	if usedFallback {
+		observe.PolicyFaults.Inc()
 	}
 	res, err := n.apply(fsm.Command{Type: fsm.CmdLease, Lease: &fsm.LeaseCmd{
 		Lane: lane, GroupID: gid, ConsumerID: consumerID, DeadlineMs: nowMs() + n.cfg.VisibilityMs,
@@ -268,11 +273,15 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	if lr == nil || lr.Empty {
 		return nil, false, nil
 	}
+	observe.Leases.Inc()
 	return lr, true, nil
 }
 
 func (n *Node) Ack(leaseID uint64) error {
 	_, err := n.apply(fsm.Command{Type: fsm.CmdAck, Ack: &fsm.AckCmd{LeaseID: leaseID}})
+	if err == nil {
+		observe.Acks.Inc()
+	}
 	return err
 }
 
@@ -283,11 +292,26 @@ func (n *Node) Nack(leaseID uint64, mode fsm.NackMode, delayMs uint64, meta map[
 	if err != nil {
 		return false, err
 	}
+	observe.Nacks.WithLabelValues(nackModeLabel(mode)).Inc()
 	nr, _ := res.(*fsm.NackResult)
 	if nr == nil {
 		return false, nil
 	}
+	if nr.DeadLettered {
+		observe.DeadLetters.Inc()
+	}
 	return nr.DeadLettered, nil
+}
+
+func nackModeLabel(m fsm.NackMode) string {
+	switch m {
+	case fsm.NackRetry:
+		return "retry"
+	case fsm.NackDeadLetter:
+		return "dead_letter"
+	default:
+		return "requeue_no_penalty"
+	}
 }
 
 func (n *Node) Extend(leaseID, ttlMs uint64) error {
@@ -418,6 +442,10 @@ func (n *Node) sweepTimers() {
 	}
 	_ = it.Close()
 	for _, e := range batch {
+		if e.kind == storage.TimerCronDue {
+			n.fireCron(storage.ParseCronDueRef(e.ref), nowMs())
+			continue
+		}
 		_, _ = n.apply(fsm.Command{Type: fsm.CmdFireTimer, Fire: &fsm.FireTimerCmd{
 			Kind: e.kind, DueTs: e.ts, Ref: e.ref, FireAt: nowMs(),
 		}})

@@ -1,0 +1,30 @@
+# Python codegen for the Rota SDK.
+#
+# Generates the gRPC Python stubs into sdk/python/rota/_gen/ so they import as
+# `from rota._gen.rota.v1 import rota_pb2, rota_pb2_grpc`. This is intentionally
+# separate from the top-level buf.gen.yaml (which drives the Go codegen) so the
+# Python SDK build does not touch the Go gen/ tree.
+#
+# Requires the protoc-gen-python plugins from grpcio-tools:
+#     pip install grpcio-tools
+#
+# Run from the repo root:
+#     buf generate --template buf.gen.python.yaml
+#
+# Equivalent raw protoc invocation (no buf needed), also run from the repo root:
+#     python3 -m grpc_tools.protoc -I proto \
+#       --python_out=sdk/python/rota/_gen \
+#       --grpc_python_out=sdk/python/rota/_gen \
+#       proto/rota/v1/rota.proto
+#
+# NOTE: grpc_tools emits an absolute `from rota.v1 import rota_pb2` line in
+# rota_pb2_grpc.py. Because the stubs live under the `rota._gen` package, that
+# import is rewritten to `from rota._gen.rota.v1 import rota_pb2`. Re-apply that
+# rewrite (and re-create the _gen/**/__init__.py files) after regenerating.
+version: v2
+clean: false
+plugins:
+  - local: protoc-gen-python
+    out: sdk/python/rota/_gen
+  - local: protoc-gen-grpc_python
+    out: sdk/python/rota/_gen

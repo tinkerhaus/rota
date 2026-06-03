@@ -1,0 +1,12 @@
+# Python virtualenv + build/dev artifacts (the SDK source and generated stubs
+# under rota/_gen/ ARE committed; only ephemeral artifacts are ignored).
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

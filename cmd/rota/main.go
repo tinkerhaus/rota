@@ -8,11 +8,14 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -43,26 +46,36 @@ func main() {
 }
 
 func cmdServe(args []string) error {
-	dataDir := "./data"
+	cfg := node.Config{DataDir: "./data", NodeID: "node1"}
 	addr := "127.0.0.1:7100"
-	id := "node1"
+	metricsAddr := "127.0.0.1:7101"
+	var peers string
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
 		case "--data":
-			dataDir = args[i+1]
+			cfg.DataDir = args[i+1]
 		case "--grpc":
 			addr = args[i+1]
+		case "--metrics":
+			metricsAddr = args[i+1]
 		case "--id":
-			id = args[i+1]
+			cfg.NodeID = args[i+1]
+		case "--raft":
+			cfg.RaftBind = args[i+1]
+		case "--bootstrap":
+			cfg.Bootstrap = args[i+1] == "true"
+		case "--peers":
+			peers = args[i+1] // id1=addr1,id2=addr2,...
 		}
 	}
+	cfg.InitialPeers = parsePeers(peers)
 
-	n, err := node.Open(node.Config{DataDir: dataDir, NodeID: id})
+	n, err := node.Open(cfg)
 	if err != nil {
 		return err
 	}
 	defer n.Close()
-	if err := n.WaitLeader(10 * time.Second); err != nil {
+	if err := n.WaitClusterLeader(15 * time.Second); err != nil {
 		return err
 	}
 
@@ -72,16 +85,46 @@ func cmdServe(args []string) error {
 	}
 	srv := grpc.NewServer()
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))
+	rotav1.RegisterControlServer(srv, transport.NewControl(n))
+
+	// Metrics + health on a side HTTP port.
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if serving, _, _ := n.Health(); serving {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	metricsSrv := &http.Server{Addr: metricsAddr, Handler: mux}
+	go func() { _ = metricsSrv.ListenAndServe() }()
 
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
+		_ = metricsSrv.Close()
 		srv.GracefulStop()
 	}()
 
-	fmt.Printf("rota: serving Broker on %s (data=%s, id=%s)\n", addr, dataDir, id)
+	fmt.Printf("rota: Broker+Control on %s, metrics on %s (data=%s, id=%s)\n", addr, metricsAddr, cfg.DataDir, cfg.NodeID)
 	return srv.Serve(lis)
+}
+
+// parsePeers parses "id1=addr1,id2=addr2" into node.Peer entries.
+func parsePeers(s string) []node.Peer {
+	if s == "" {
+		return nil
+	}
+	var out []node.Peer
+	for _, part := range strings.Split(s, ",") {
+		if kv := strings.SplitN(part, "=", 2); len(kv) == 2 {
+			out = append(out, node.Peer{ID: kv[0], Addr: kv[1]})
+		}
+	}
+	return out
 }
 
 func cmdDemo(args []string) error {
