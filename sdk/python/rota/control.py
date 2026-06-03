@@ -24,7 +24,7 @@ class Control:
 
     def __init__(
         self,
-        targets: Targets = "localhost:9090",
+        targets: Targets = "127.0.0.1:7100",
         *,
         timeout: Optional[float] = 30.0,
         max_retries: int = 5,
