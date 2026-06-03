@@ -1,12 +1,14 @@
 // Package node wires Pebble + Raft + the FSM + the DRR scheduler into one broker
-// node and exposes publish / fair-lease / ack / nack / extend, plus the leader-only
-// Chronos loop that fires due timers (delayed publish, retry backoff, visibility).
+// node. It supports a single-voter in-memory transport (dev) or a real TCP raft
+// cluster (HA), and runs the leader-only Chronos loop that fires due timers.
 package node
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -20,10 +22,23 @@ import (
 
 const maxFireBatch = 256
 
+// Peer identifies a raft voter for cluster bootstrap.
+type Peer struct {
+	ID   string
+	Addr string
+}
+
 type Config struct {
 	DataDir      string
 	NodeID       string
 	VisibilityMs uint64
+
+	// Clustering. RaftBind == "" selects the in-memory transport (single-node
+	// dev/test). Otherwise a TCP transport is created on RaftBind.
+	RaftBind      string
+	RaftAdvertise string // defaults to RaftBind
+	Bootstrap     bool   // this node forms the initial cluster
+	InitialPeers  []Peer // voter set for the bootstrapping node (empty ⇒ just self)
 }
 
 type Node struct {
@@ -35,7 +50,6 @@ type Node struct {
 	cancel context.CancelFunc
 }
 
-// PublishReq is the input to Publish.
 type PublishReq struct {
 	Lane        string
 	GroupID     string
@@ -43,11 +57,10 @@ type PublishReq struct {
 	Headers     map[string]string
 	Weight      *float64
 	BatchSize   *uint32
-	NotBeforeMs uint64 // 0 ⇒ eligible now
+	NotBeforeMs uint64
 	MaxAttempts uint32
 }
 
-// Open boots a single-voter raft node on its own Pebble DB and starts Chronos.
 func Open(cfg Config) (*Node, error) {
 	if cfg.NodeID == "" {
 		cfg.NodeID = "node1"
@@ -67,12 +80,20 @@ func Open(cfg Config) (*Node, error) {
 
 	rc := raft.DefaultConfig()
 	rc.LocalID = raft.ServerID(cfg.NodeID)
-	rc.SnapshotThreshold = 1 << 60
-	rc.SnapshotInterval = 365 * 24 * time.Hour
+	rc.SnapshotThreshold = 8192
+	rc.SnapshotInterval = 30 * time.Second
+	rc.TrailingLogs = 1024
 	rc.LogLevel = "ERROR"
 
-	snaps := raft.NewInmemSnapshotStore()
-	_, transport := raft.NewInmemTransport(raft.ServerAddress(cfg.NodeID))
+	snaps, err := raft.NewFileSnapshotStore(cfg.DataDir, 2, io.Discard)
+	if err != nil {
+		return nil, err
+	}
+
+	transport, selfAddr, err := newTransport(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	r, err := raft.NewRaft(rc, f, logStore, logStore, snaps, transport)
 	if err != nil {
@@ -82,9 +103,18 @@ func Open(cfg Config) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !hasState {
-		conf := raft.Configuration{Servers: []raft.Server{{ID: rc.LocalID, Address: transport.LocalAddr()}}}
-		if err := r.BootstrapCluster(conf).Error(); err != nil {
+	// The in-memory single-node dev path auto-bootstraps; a TCP cluster requires
+	// exactly one node to set Bootstrap.
+	if (cfg.Bootstrap || cfg.RaftBind == "") && !hasState {
+		servers := []raft.Server{}
+		if len(cfg.InitialPeers) == 0 {
+			servers = append(servers, raft.Server{ID: rc.LocalID, Address: selfAddr})
+		} else {
+			for _, p := range cfg.InitialPeers {
+				servers = append(servers, raft.Server{ID: raft.ServerID(p.ID), Address: raft.ServerAddress(p.Addr)})
+			}
+		}
+		if err := r.BootstrapCluster(raft.Configuration{Servers: servers}).Error(); err != nil {
 			return nil, err
 		}
 	}
@@ -93,6 +123,26 @@ func Open(cfg Config) (*Node, error) {
 	n := &Node{cfg: cfg, store: st, fsm: f, raft: r, sched: scheduler.New(), cancel: cancel}
 	go n.chronosLoop(ctx)
 	return n, nil
+}
+
+func newTransport(cfg Config) (raft.Transport, raft.ServerAddress, error) {
+	if cfg.RaftBind == "" {
+		addr, inm := raft.NewInmemTransport(raft.ServerAddress(cfg.NodeID))
+		return inm, addr, nil
+	}
+	adv := cfg.RaftAdvertise
+	if adv == "" {
+		adv = cfg.RaftBind
+	}
+	tcpAddr, err := net.ResolveTCPAddr("tcp", adv)
+	if err != nil {
+		return nil, "", err
+	}
+	t, err := raft.NewTCPTransport(cfg.RaftBind, tcpAddr, 3, 10*time.Second, io.Discard)
+	if err != nil {
+		return nil, "", err
+	}
+	return t, raft.ServerAddress(adv), nil
 }
 
 func (n *Node) WaitLeader(timeout time.Duration) error {
@@ -105,6 +155,34 @@ func (n *Node) WaitLeader(timeout time.Duration) error {
 	}
 	return fmt.Errorf("no leader elected within %s", timeout)
 }
+
+// WaitClusterLeader waits until SOME node in the cluster is leader (this node may
+// be a follower).
+func (n *Node) WaitClusterLeader(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if addr, _ := n.raft.LeaderWithID(); addr != "" {
+			return nil
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return fmt.Errorf("no cluster leader within %s", timeout)
+}
+
+func (n *Node) IsLeader() bool { return n.raft.State() == raft.Leader }
+
+func (n *Node) LeaderAddr() string {
+	addr, _ := n.raft.LeaderWithID()
+	return string(addr)
+}
+
+func (n *Node) AddVoter(id, addr string) error {
+	return n.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 10*time.Second).Error()
+}
+
+func (n *Node) Barrier(timeout time.Duration) error { return n.raft.Barrier(timeout).Error() }
+
+func (n *Node) ForceSnapshot() error { return n.raft.Snapshot().Error() }
 
 func (n *Node) Close() error {
 	n.cancel()
@@ -151,8 +229,6 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 	return pr.MsgID, nil
 }
 
-// LeaseOne runs the DRR scheduler to choose a group, then leases that group's
-// head message. ok=false means there is no leasable work right now.
 func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error) {
 	groups, err := n.store.ListGroups(lane)
 	if err != nil {
@@ -189,7 +265,6 @@ func (n *Node) Ack(leaseID uint64) error {
 	return err
 }
 
-// Nack returns deadLettered=true if this nack drove the message to the DLQ.
 func (n *Node) Nack(leaseID uint64, mode fsm.NackMode, delayMs uint64, meta map[string]string) (bool, error) {
 	res, err := n.apply(fsm.Command{Type: fsm.CmdNack, Nack: &fsm.NackCmd{
 		LeaseID: leaseID, Mode: mode, DelayMs: delayMs, FailureMeta: meta, NowMs: nowMs(),
@@ -211,11 +286,8 @@ func (n *Node) Extend(leaseID, ttlMs uint64) error {
 	return err
 }
 
-// DLQCount reports how many dead letters a lane holds (test/introspection helper).
 func (n *Node) DLQCount(lane string) (int, error) { return n.store.CountDLQ(lane) }
 
-// chronosLoop is the leader-only timer sweep: it turns due time-index rows into
-// committed FireTimer commands. Followers never fire on their own clock.
 func (n *Node) chronosLoop(ctx context.Context) {
 	t := time.NewTicker(25 * time.Millisecond)
 	defer t.Stop()
@@ -258,7 +330,6 @@ func (n *Node) sweepTimers() {
 	}
 	_ = it.Close()
 	for _, e := range batch {
-		// apply blocks until commit, so the row is deleted before the next sweep.
 		_, _ = n.apply(fsm.Command{Type: fsm.CmdFireTimer, Fire: &fsm.FireTimerCmd{
 			Kind: e.kind, DueTs: e.ts, Ref: e.ref, FireAt: nowMs(),
 		}})

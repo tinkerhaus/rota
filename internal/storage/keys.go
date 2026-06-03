@@ -153,6 +153,11 @@ func DLQLanePrefix(lane string) []byte {
 	return append(k, lp(lane)...)
 }
 
+// AppKeyspaceBounds returns the [lo, hi) range covering all application tables
+// (everything EXCEPT the raft log/stable store at 0xFE/0xFF). Used by FSM
+// snapshots so a snapshot/restore never clobbers a node's own raft log.
+func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagDLQ + 1} }
+
 // RaftLogKey / RaftLogPrefix: 0xFE ++ u64be(index)
 func RaftLogKey(index uint64) []byte { return append([]byte{tagRaftLog}, u64be(index)...) }
 func RaftLogPrefix() []byte          { return []byte{tagRaftLog} }

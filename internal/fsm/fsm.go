@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -471,16 +472,109 @@ func (f *FSM) nextLeaseID(b *pebble.Batch) uint64 {
 	return id
 }
 
-// Snapshot/Restore are no-ops for now: the FSM IS the durable Pebble DB and
-// applied_index gating makes log replay idempotent. Pebble-checkpoint snapshots
-// + log truncation land in the HA-hardening phase.
-func (f *FSM) Snapshot() (raft.FSMSnapshot, error) { return noopSnapshot{}, nil }
-func (f *FSM) Restore(rc io.ReadCloser) error      { return rc.Close() }
+// Snapshot captures a consistent point-in-time of the APPLICATION keyspace (not
+// the raft log, which lives under its own tags) via a Pebble snapshot, streamed
+// as length-prefixed key/value pairs. This bounds the raft log (truncation after
+// a snapshot) and lets a lagging/new follower catch up via InstallSnapshot.
+func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
+	return &kvSnapshot{snap: f.s.DB.NewSnapshot()}, nil
+}
 
-type noopSnapshot struct{}
+func (f *FSM) Restore(rc io.ReadCloser) error {
+	defer rc.Close()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	lo, hi := storage.AppKeyspaceBounds()
+	if err := f.s.DB.DeleteRange(lo, hi, pebble.Sync); err != nil {
+		return err
+	}
+	r := bufio.NewReaderSize(rc, 1<<16)
+	b := f.s.DB.NewBatch()
+	defer b.Close()
+	for {
+		key, err := readChunk(r)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		val, err := readChunk(r)
+		if err != nil {
+			return err
+		}
+		if err := b.Set(key, val, nil); err != nil {
+			return err
+		}
+		if b.Len() > 4<<20 {
+			if err := b.Commit(pebble.Sync); err != nil {
+				return err
+			}
+			b = f.s.DB.NewBatch()
+		}
+	}
+	if err := b.Commit(pebble.Sync); err != nil {
+		return err
+	}
+	if v, ok, _ := f.s.GetRaw(storage.MetaKey("applied_index")); ok {
+		f.appliedIndex = beU64(v)
+	}
+	return nil
+}
 
-func (noopSnapshot) Persist(sink raft.SnapshotSink) error { return sink.Close() }
-func (noopSnapshot) Release()                             {}
+type kvSnapshot struct{ snap *pebble.Snapshot }
+
+func (k *kvSnapshot) Persist(sink raft.SnapshotSink) error {
+	lo, hi := storage.AppKeyspaceBounds()
+	it, err := k.snap.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		_ = sink.Cancel()
+		return err
+	}
+	w := bufio.NewWriterSize(sink, 1<<16)
+	for it.First(); it.Valid(); it.Next() {
+		if err := writeChunk(w, it.Key()); err != nil {
+			_ = it.Close()
+			_ = sink.Cancel()
+			return err
+		}
+		if err := writeChunk(w, it.Value()); err != nil {
+			_ = it.Close()
+			_ = sink.Cancel()
+			return err
+		}
+	}
+	_ = it.Close()
+	if err := w.Flush(); err != nil {
+		_ = sink.Cancel()
+		return err
+	}
+	return sink.Close()
+}
+
+func (k *kvSnapshot) Release() { _ = k.snap.Close() }
+
+func writeChunk(w *bufio.Writer, b []byte) error {
+	var l [4]byte
+	binary.BigEndian.PutUint32(l[:], uint32(len(b)))
+	if _, err := w.Write(l[:]); err != nil {
+		return err
+	}
+	_, err := w.Write(b)
+	return err
+}
+
+func readChunk(r *bufio.Reader) ([]byte, error) {
+	var l [4]byte
+	if _, err := io.ReadFull(r, l[:]); err != nil {
+		return nil, err // io.EOF at a record boundary ends the stream
+	}
+	buf := make([]byte, binary.BigEndian.Uint32(l[:]))
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
 
 func addTimer(b *pebble.Batch, dueTs uint64, kind byte, ref []byte, epoch uint32) error {
 	return b.Set(storage.TimeIndexKey(dueTs, kind, ref), u64b(uint64(epoch)), nil)
