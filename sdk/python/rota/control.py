@@ -232,6 +232,33 @@ class Control:
             pb.ReleaseSingletonRequest(name=name, holder=holder, fence=fence),
         )
 
+    # -- async completion ---------------------------------------------------
+
+    def complete_by_token(
+        self,
+        external_token: bytes,
+        *,
+        success: bool = True,
+        result_meta: Optional[Mapping[str, str]] = None,
+        delay: Optional[float] = None,
+    ) -> pb.CompleteResult:
+        """Resolve a complete-by-token message off-stream by its token.
+
+        ``success=False`` records a failure (the message is retried/dead-lettered
+        per the lane policy). An unknown token is benign (``unknown_token=True``)
+        so at-least-once callbacks can fire more than once safely.
+        """
+        req = pb.CompleteByTokenRequest(
+            external_token=external_token,
+            outcome=pb.SUCCESS if success else pb.FAILURE,
+        )
+        if result_meta:
+            for k, v in result_meta.items():
+                req.result_meta[k] = v
+        if delay is not None:
+            req.delay.CopyFrom(to_duration(delay))
+        return self._call("CompleteByToken", req)
+
     # -- introspection ------------------------------------------------------
 
     def get_stats(self, lane: str = "", group_id: str = "") -> pb.StatsResponse:

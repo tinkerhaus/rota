@@ -42,6 +42,13 @@ class Publisher:
             max_retries=max_retries,
             credentials=credentials,
         )
+        # CompleteByToken lives on the Control service, not Broker; lazily dial a
+        # Control client (sharing the same targets) when complete() is first used.
+        self._targets = targets
+        self._channel_options = channel_options
+        self._max_retries = max_retries
+        self._credentials = credentials
+        self._control: Optional[LeaderClient] = None
 
     # -- spec construction --------------------------------------------------
 
@@ -199,10 +206,20 @@ class Publisher:
                 req.result_meta[k] = v
         if delay is not None:
             req.delay.CopyFrom(to_duration(delay))
-        return self._client.call("CompleteByToken", req, timeout=self._timeout)
+        if self._control is None:
+            self._control = LeaderClient(
+                self._targets,
+                pb_grpc.ControlStub,
+                channel_options=self._channel_options,
+                max_retries=self._max_retries,
+                credentials=self._credentials,
+            )
+        return self._control.call("CompleteByToken", req, timeout=self._timeout)
 
     def close(self) -> None:
         self._client.close()
+        if self._control is not None:
+            self._control.close()
 
     def __enter__(self) -> "Publisher":
         return self

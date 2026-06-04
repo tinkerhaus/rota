@@ -250,6 +250,7 @@ const (
 	ErrorCode_POLICY_FAULT  ErrorCode = 4
 	ErrorCode_RATE_LIMITED  ErrorCode = 5
 	ErrorCode_UNKNOWN_TOKEN ErrorCode = 6
+	ErrorCode_INTERNAL      ErrorCode = 7 // per-item failure in a best-effort batch
 )
 
 // Enum value maps for ErrorCode.
@@ -262,6 +263,7 @@ var (
 		4: "POLICY_FAULT",
 		5: "RATE_LIMITED",
 		6: "UNKNOWN_TOKEN",
+		7: "INTERNAL",
 	}
 	ErrorCode_value = map[string]int32{
 		"OK":            0,
@@ -271,6 +273,7 @@ var (
 		"POLICY_FAULT":  4,
 		"RATE_LIMITED":  5,
 		"UNKNOWN_TOKEN": 6,
+		"INTERNAL":      7,
 	}
 )
 
@@ -476,8 +479,10 @@ type Message struct {
 	MaxAttempts   uint32                 `protobuf:"varint,9,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`                                               // 0 = lane default
 	EnqueueMs     uint64                 `protobuf:"varint,10,opt,name=enqueue_ms,json=enqueueMs,proto3" json:"enqueue_ms,omitempty"`                                                    // broker-set
 	State         MessageState           `protobuf:"varint,11,opt,name=state,proto3,enum=rota.v1.MessageState" json:"state,omitempty"`
-	Epoch         uint32                 `protobuf:"varint,12,opt,name=epoch,proto3" json:"epoch,omitempty"`                       // bumped on every state change; idempotency linchpin
-	CurLease      uint64                 `protobuf:"varint,13,opt,name=cur_lease,json=curLease,proto3" json:"cur_lease,omitempty"` // lease id while LEASED
+	Epoch         uint32                 `protobuf:"varint,12,opt,name=epoch,proto3" json:"epoch,omitempty"`                                     // bumped on every state change; idempotency linchpin
+	CurLease      uint64                 `protobuf:"varint,13,opt,name=cur_lease,json=curLease,proto3" json:"cur_lease,omitempty"`               // lease id while LEASED
+	IssueToken    bool                   `protobuf:"varint,14,opt,name=issue_token,json=issueToken,proto3" json:"issue_token,omitempty"`         // mint a completion token at lease time
+	ExternalToken []byte                 `protobuf:"bytes,15,opt,name=external_token,json=externalToken,proto3" json:"external_token,omitempty"` // producer-supplied completion token (optional)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -603,6 +608,20 @@ func (x *Message) GetCurLease() uint64 {
 	return 0
 }
 
+func (x *Message) GetIssueToken() bool {
+	if x != nil {
+		return x.IssueToken
+	}
+	return false
+}
+
+func (x *Message) GetExternalToken() []byte {
+	if x != nil {
+		return x.ExternalToken
+	}
+	return nil
+}
+
 // GroupMeta holds BOTH the live knobs and the fairness counters, quorum-written
 // in the same store as messages (this is what kills "redis flush loses weights").
 type GroupMeta struct {
@@ -621,6 +640,7 @@ type GroupMeta struct {
 	LastServedSeq  int64                  `protobuf:"varint,12,opt,name=last_served_seq,json=lastServedSeq,proto3" json:"last_served_seq,omitempty"`
 	LastServedTs   int64                  `protobuf:"varint,13,opt,name=last_served_ts,json=lastServedTs,proto3" json:"last_served_ts,omitempty"`
 	LastActivityMs uint64                 `protobuf:"varint,14,opt,name=last_activity_ms,json=lastActivityMs,proto3" json:"last_activity_ms,omitempty"`
+	DelayedCount   uint64                 `protobuf:"varint,15,opt,name=delayed_count,json=delayedCount,proto3" json:"delayed_count,omitempty"` // messages DELAYED (not-before in the future)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -749,6 +769,13 @@ func (x *GroupMeta) GetLastServedTs() int64 {
 func (x *GroupMeta) GetLastActivityMs() uint64 {
 	if x != nil {
 		return x.LastActivityMs
+	}
+	return 0
+}
+
+func (x *GroupMeta) GetDelayedCount() uint64 {
+	if x != nil {
+		return x.DelayedCount
 	}
 	return 0
 }
@@ -4570,7 +4597,7 @@ var File_rota_v1_rota_proto protoreflect.FileDescriptor
 
 const file_rota_v1_rota_proto_rawDesc = "" +
 	"\n" +
-	"\x12rota/v1/rota.proto\x12\arota.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd5\x03\n" +
+	"\x12rota/v1/rota.proto\x12\arota.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x04\n" +
 	"\aMessage\x12\x15\n" +
 	"\x06msg_id\x18\x01 \x01(\x04R\x05msgId\x12\x12\n" +
 	"\x04lane\x18\x02 \x01(\tR\x04lane\x12\x19\n" +
@@ -4586,10 +4613,13 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	" \x01(\x04R\tenqueueMs\x12+\n" +
 	"\x05state\x18\v \x01(\x0e2\x15.rota.v1.MessageStateR\x05state\x12\x14\n" +
 	"\x05epoch\x18\f \x01(\rR\x05epoch\x12\x1b\n" +
-	"\tcur_lease\x18\r \x01(\x04R\bcurLease\x1a:\n" +
+	"\tcur_lease\x18\r \x01(\x04R\bcurLease\x12\x1f\n" +
+	"\vissue_token\x18\x0e \x01(\bR\n" +
+	"issueToken\x12%\n" +
+	"\x0eexternal_token\x18\x0f \x01(\fR\rexternalToken\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc2\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe7\x03\n" +
 	"\tGroupMeta\x12\x12\n" +
 	"\x04lane\x18\x01 \x01(\tR\x04lane\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x16\n" +
@@ -4608,7 +4638,8 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\bnext_seq\x18\v \x01(\x04R\anextSeq\x12&\n" +
 	"\x0flast_served_seq\x18\f \x01(\x03R\rlastServedSeq\x12$\n" +
 	"\x0elast_served_ts\x18\r \x01(\x03R\flastServedTs\x12(\n" +
-	"\x10last_activity_ms\x18\x0e \x01(\x04R\x0elastActivityMs\"\xe0\x02\n" +
+	"\x10last_activity_ms\x18\x0e \x01(\x04R\x0elastActivityMs\x12#\n" +
+	"\rdelayed_count\x18\x0f \x01(\x04R\fdelayedCount\"\xe0\x02\n" +
 	"\x05Lease\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\x04R\aleaseId\x12\x15\n" +
 	"\x06msg_id\x18\x02 \x01(\x04R\x05msgId\x12\x12\n" +
@@ -4960,7 +4991,7 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"PAUSE_LANE\x10\x01\x12\x0f\n" +
 	"\vRESUME_LANE\x10\x02\x12\x0f\n" +
 	"\vPAUSE_GROUP\x10\x03\x12\x10\n" +
-	"\fRESUME_GROUP\x10\x04*\x80\x01\n" +
+	"\fRESUME_GROUP\x10\x04*\x8e\x01\n" +
 	"\tErrorCode\x12\x06\n" +
 	"\x02OK\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -4969,7 +5000,8 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\rUNKNOWN_LEASE\x10\x03\x12\x10\n" +
 	"\fPOLICY_FAULT\x10\x04\x12\x10\n" +
 	"\fRATE_LIMITED\x10\x05\x12\x11\n" +
-	"\rUNKNOWN_TOKEN\x10\x06*i\n" +
+	"\rUNKNOWN_TOKEN\x10\x06\x12\f\n" +
+	"\bINTERNAL\x10\a*i\n" +
 	"\n" +
 	"PolicyKind\x12\x1b\n" +
 	"\x17POLICY_KIND_UNSPECIFIED\x10\x00\x12\a\n" +

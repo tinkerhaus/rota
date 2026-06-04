@@ -60,6 +60,8 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 	switch cmd.Type {
 	case CmdPublish:
 		res, err = f.applyPublish(b, cmd.Publish)
+	case CmdPublishBatch:
+		res, err = f.applyPublishBatch(b, cmd.PublishBatch)
 	case CmdLease:
 		res, err = f.applyLease(b, cmd.Lease)
 	case CmdAck:
@@ -106,19 +108,19 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 	return res
 }
 
-func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) {
+// loadGroupMeta returns the group's meta, initialized with defaults if absent.
+func (f *FSM) loadGroupMeta(lane, group string) *rotav1.GroupMeta {
 	gm := &rotav1.GroupMeta{}
-	found, err := f.s.GetProto(storage.GroupMetaKey(c.Lane, c.GroupID), gm)
-	if err != nil {
-		return nil, err
+	if found, _ := f.s.GetProto(storage.GroupMetaKey(lane, group), gm); !found {
+		gm.Lane, gm.GroupId, gm.Weight, gm.BatchSize, gm.NextSeq = lane, group, 1.0, 1, 1
 	}
-	if !found {
-		gm.Lane = c.Lane
-		gm.GroupId = c.GroupID
-		gm.Weight = 1.0
-		gm.BatchSize = 1
-		gm.NextSeq = 1
-	}
+	return gm
+}
+
+// publishOne writes one message into the batch and mutates the caller-owned
+// group meta (which may be shared across a multi-item batch). The CALLER
+// persists gm. Returns the assigned per-group message id.
+func (f *FSM) publishOne(b *pebble.Batch, c *PublishCmd, gm *rotav1.GroupMeta) (uint64, error) {
 	if c.HasWeight {
 		gm.Weight = c.Weight
 	}
@@ -135,20 +137,23 @@ func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) 
 	gm.LastActivityMs = c.NowMs
 
 	msg := &rotav1.Message{
-		MsgId:       msgID,
-		Lane:        c.Lane,
-		GroupId:     c.GroupID,
-		Payload:     c.Payload,
-		Headers:     c.Headers,
-		NotBeforeMs: c.NotBeforeMs,
-		MaxAttempts: c.MaxAttempts,
-		EnqueueMs:   c.NowMs,
+		MsgId:         msgID,
+		Lane:          c.Lane,
+		GroupId:       c.GroupID,
+		Payload:       c.Payload,
+		Headers:       c.Headers,
+		NotBeforeMs:   c.NotBeforeMs,
+		MaxAttempts:   c.MaxAttempts,
+		EnqueueMs:     c.NowMs,
+		IssueToken:    c.IssueToken,
+		ExternalToken: c.ExternalToken,
 	}
 	if c.NotBeforeMs > c.NowMs {
 		// Delayed: not leasable until T. Same mechanism as retry backoff.
 		msg.State = rotav1.MessageState_DELAYED
+		gm.DelayedCount++
 		if err := addTimer(b, c.NotBeforeMs, storage.TimerReadyAt, storage.ReadyAtRef(c.Lane, c.GroupID, msgID), msg.Epoch); err != nil {
-			return nil, err
+			return 0, err
 		}
 	} else {
 		msg.State = rotav1.MessageState_READY
@@ -156,12 +161,55 @@ func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) 
 	}
 
 	if err := putProto(b, storage.MessageKey(c.Lane, c.GroupID, msgID), msg); err != nil {
+		return 0, err
+	}
+	return msgID, nil
+}
+
+func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) {
+	gm := f.loadGroupMeta(c.Lane, c.GroupID)
+	id, err := f.publishOne(b, c, gm)
+	if err != nil {
 		return nil, err
 	}
 	if err := putProto(b, storage.GroupMetaKey(c.Lane, c.GroupID), gm); err != nil {
 		return nil, err
 	}
-	return &PublishResult{MsgID: msgID}, nil
+	return &PublishResult{MsgID: id}, nil
+}
+
+// applyPublishBatch applies many publishes in one entry. Same-group items share
+// one evolving GroupMeta (so per-group seq ids stay unique within the batch).
+func (f *FSM) applyPublishBatch(b *pebble.Batch, c *PublishBatchCmd) (interface{}, error) {
+	cache := map[string]*rotav1.GroupMeta{}
+	order := make([]string, 0, len(c.Items))
+	res := &PublishBatchResult{Items: make([]PublishItemResult, len(c.Items))}
+	for i := range c.Items {
+		item := &c.Items[i]
+		key := item.Lane + "\x00" + item.GroupID
+		gm := cache[key]
+		if gm == nil {
+			gm = f.loadGroupMeta(item.Lane, item.GroupID)
+			cache[key] = gm
+			order = append(order, key)
+		}
+		id, err := f.publishOne(b, item, gm)
+		if err != nil {
+			if c.Atomic {
+				return nil, err // all-or-nothing: abort, nothing commits
+			}
+			res.Items[i] = PublishItemResult{Err: err.Error()}
+			continue
+		}
+		res.Items[i] = PublishItemResult{MsgID: id, OK: true}
+	}
+	for _, key := range order {
+		gm := cache[key]
+		if err := putProto(b, storage.GroupMetaKey(gm.Lane, gm.GroupId), gm); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (f *FSM) applyLease(b *pebble.Batch, c *LeaseCmd) (interface{}, error) {
@@ -212,14 +260,16 @@ func (f *FSM) applyLease(b *pebble.Batch, c *LeaseCmd) (interface{}, error) {
 		return nil, err
 	}
 	return &LeaseResult{
-		LeaseID:    leaseID,
-		MsgID:      head.MsgId,
-		Lane:       c.Lane,
-		GroupID:    c.GroupID,
-		Payload:    head.Payload,
-		Headers:    head.Headers,
-		Attempt:    head.Attempt,
-		DeadlineMs: c.DeadlineMs,
+		LeaseID:       leaseID,
+		MsgID:         head.MsgId,
+		Lane:          c.Lane,
+		GroupID:       c.GroupID,
+		Payload:       head.Payload,
+		Headers:       head.Headers,
+		Attempt:       head.Attempt,
+		DeadlineMs:    c.DeadlineMs,
+		IssueToken:    head.IssueToken,
+		ExternalToken: head.ExternalToken,
 	}, nil
 }
 
@@ -381,6 +431,7 @@ func (f *FSM) applyFireTimer(b *pebble.Batch, c *FireTimerCmd) (interface{}, err
 				gm := &rotav1.GroupMeta{}
 				if gf, _ := f.s.GetProto(storage.GroupMetaKey(lane, group), gm); gf {
 					gm.ReadyCount++
+					decr(&gm.DelayedCount)
 					_ = putProto(b, storage.GroupMetaKey(lane, group), gm)
 				}
 				if err := putProto(b, storage.MessageKey(lane, group, msgID), msg); err != nil {
@@ -446,6 +497,7 @@ func (f *FSM) makeReady(b *pebble.Batch, msg *rotav1.Message, gm *rotav1.GroupMe
 	msg.Epoch++
 	if readyAtMs > nowMs {
 		msg.State = rotav1.MessageState_DELAYED
+		gm.DelayedCount++
 		if err := addTimer(b, readyAtMs, storage.TimerReadyAt, storage.ReadyAtRef(msg.Lane, msg.GroupId, msg.MsgId), msg.Epoch); err != nil {
 			return err
 		}

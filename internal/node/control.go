@@ -143,6 +143,20 @@ func (n *Node) IssueToken(leaseID uint64) ([]byte, error) {
 	return tok, nil
 }
 
+// registerToken binds a producer-supplied completion token to a lease (the
+// hash is replicated; the raw token is held only by the producer/consumer).
+func (n *Node) registerToken(leaseID uint64, token []byte) error {
+	h := sha256.Sum256(token)
+	res, err := n.apply(fsm.Command{Type: fsm.CmdIssueToken, IssueToken: &fsm.IssueTokenCmd{LeaseID: leaseID, TokenHash: h[:]}})
+	if err != nil {
+		return err
+	}
+	if r, ok := res.(*fsm.AckResult); ok && !r.OK {
+		return fmt.Errorf("lease %d not found", leaseID)
+	}
+	return nil
+}
+
 func (n *Node) Complete(token []byte, success bool, meta map[string]string) (deadLettered, unknown bool, err error) {
 	h := sha256.Sum256(token)
 	res, e := n.apply(fsm.Command{Type: fsm.CmdComplete, Complete: &fsm.CompleteCmd{

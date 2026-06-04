@@ -22,6 +22,7 @@ const (
 	CmdSetLaneConfig
 	CmdReapGroup
 	CmdTeardownGroup
+	CmdPublishBatch
 )
 
 type GroupOp uint8
@@ -60,14 +61,15 @@ const (
 )
 
 type Command struct {
-	Type    CmdType       `json:"t"`
-	Publish *PublishCmd   `json:"p,omitempty"`
-	Lease   *LeaseCmd     `json:"l,omitempty"`
-	Ack     *AckCmd       `json:"a,omitempty"`
-	Nack    *NackCmd      `json:"n,omitempty"`
-	Extend  *ExtendCmd    `json:"e,omitempty"`
-	Fire    *FireTimerCmd `json:"f,omitempty"`
-	Policy  *PolicyCmd    `json:"pol,omitempty"`
+	Type         CmdType          `json:"t"`
+	Publish      *PublishCmd      `json:"p,omitempty"`
+	PublishBatch *PublishBatchCmd `json:"pb,omitempty"`
+	Lease        *LeaseCmd        `json:"l,omitempty"`
+	Ack          *AckCmd          `json:"a,omitempty"`
+	Nack         *NackCmd         `json:"n,omitempty"`
+	Extend       *ExtendCmd       `json:"e,omitempty"`
+	Fire         *FireTimerCmd    `json:"f,omitempty"`
+	Policy       *PolicyCmd       `json:"pol,omitempty"`
 
 	GroupConfig    *GroupConfigCmd    `json:"gc,omitempty"`
 	GroupLifecycle *GroupLifecycleCmd `json:"gl,omitempty"`
@@ -173,18 +175,36 @@ type PolicyCmd struct {
 }
 
 type PublishCmd struct {
-	Lane        string            `json:"lane"`
-	GroupID     string            `json:"g"`
-	Payload     []byte            `json:"pl,omitempty"`
-	Headers     map[string]string `json:"h,omitempty"`
-	Weight      float64           `json:"w,omitempty"`
-	HasWeight   bool              `json:"hw,omitempty"`
-	BatchSize   uint32            `json:"bs,omitempty"`
-	HasBatch    bool              `json:"hb,omitempty"`
-	MaxAttempts uint32            `json:"ma,omitempty"`
-	NotBeforeMs uint64            `json:"nb,omitempty"` // 0 ⇒ eligible now; else DELAYED until T
-	NowMs       uint64            `json:"now,omitempty"`
+	Lane          string            `json:"lane"`
+	GroupID       string            `json:"g"`
+	Payload       []byte            `json:"pl,omitempty"`
+	Headers       map[string]string `json:"h,omitempty"`
+	Weight        float64           `json:"w,omitempty"`
+	HasWeight     bool              `json:"hw,omitempty"`
+	BatchSize     uint32            `json:"bs,omitempty"`
+	HasBatch      bool              `json:"hb,omitempty"`
+	MaxAttempts   uint32            `json:"ma,omitempty"`
+	NotBeforeMs   uint64            `json:"nb,omitempty"` // 0 ⇒ eligible now; else DELAYED until T
+	NowMs         uint64            `json:"now,omitempty"`
+	IssueToken    bool              `json:"itk,omitempty"` // mint a completion token at lease time
+	ExternalToken []byte            `json:"etk,omitempty"` // producer-supplied completion token (optional)
 }
+
+// PublishBatchCmd applies many publishes in one Raft entry. Atomic ⇒ any item
+// error aborts the whole batch (nothing commits); best-effort ⇒ good items
+// commit and per-item failures are reported.
+type PublishBatchCmd struct {
+	Items  []PublishCmd `json:"items"`
+	Atomic bool         `json:"atomic,omitempty"`
+}
+
+type PublishItemResult struct {
+	MsgID uint64
+	OK    bool
+	Err   string
+}
+
+type PublishBatchResult struct{ Items []PublishItemResult }
 
 // LeaseCmd carries the leader's DECISION (which group to serve). The FSM picks
 // the head READY message of that group and assigns the lease id deterministically.
@@ -235,6 +255,11 @@ type LeaseResult struct {
 	Attempt    uint32
 	DeadlineMs uint64
 	Empty      bool // no leasable message (benign)
+
+	// Complete-by-token intent carried from the message, so the leader can mint
+	// (IssueToken) or register (ExternalToken) the token after leasing.
+	IssueToken    bool
+	ExternalToken []byte
 }
 
 type AckResult struct{ OK bool }

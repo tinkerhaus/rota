@@ -230,7 +230,7 @@ func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsReque
 	resp := &rotav1.StatsResponse{}
 	for _, s := range stats {
 		resp.Lanes = append(resp.Lanes, &rotav1.LaneStats{
-			Lane: s.Lane, Leasable: s.Leasable, Inflight: s.Inflight,
+			Lane: s.Lane, Leasable: s.Leasable, Delayed: s.Delayed, Inflight: s.Inflight,
 			DlqDepth: s.DLQ, GroupCount: s.GroupCount, PolicyVersion: s.PolicyVersion,
 		})
 	}

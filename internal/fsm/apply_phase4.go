@@ -153,6 +153,7 @@ func (f *FSM) dropLeasable(b *pebble.Batch, lane, group string, gm *rotav1.Group
 	}
 	_ = it.Close()
 	gm.ReadyCount = 0
+	gm.DelayedCount = 0
 	if gm.TotalCount >= dropped {
 		gm.TotalCount -= dropped
 	} else {

@@ -240,6 +240,12 @@ class Worker:
             self._candidates.remove(leader_addr)
             self._candidates.insert(0, leader_addr)
 
+    def _rotate_candidates(self) -> None:
+        """Move the current head target to the back, so the next reconnect tries
+        a different node (the prior one may be down)."""
+        if self._external_channel is None and len(self._candidates) > 1:
+            self._candidates.append(self._candidates.pop(0))
+
     def _run_one_session(self) -> Optional[str]:
         """Open one Work stream and pump it until it ends.
 
@@ -332,8 +338,11 @@ class Worker:
                 if self._stopped.is_set():
                     break
 
-                # Plain disconnect: back off then reconnect.
+                # Plain disconnect: the current target may be down. Rotate to the
+                # next candidate (a follower redirects us to the leader), back off,
+                # then reconnect — this is what makes dead-leader failover work.
                 self._close_channel()
+                self._rotate_candidates()
                 self._sleep_backoff(backoff_attempt)
                 backoff_attempt += 1
         finally:

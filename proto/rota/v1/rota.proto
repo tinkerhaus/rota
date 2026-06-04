@@ -101,6 +101,8 @@ message Message {
   MessageState state = 11;
   uint32 epoch = 12;                    // bumped on every state change; idempotency linchpin
   uint64 cur_lease = 13;                // lease id while LEASED
+  bool issue_token = 14;                // mint a completion token at lease time
+  bytes external_token = 15;            // producer-supplied completion token (optional)
 }
 
 // GroupMeta holds BOTH the live knobs and the fairness counters, quorum-written
@@ -120,6 +122,7 @@ message GroupMeta {
   int64 last_served_seq = 12;
   int64 last_served_ts = 13;
   uint64 last_activity_ms = 14;
+  uint64 delayed_count = 15;            // messages DELAYED (not-before in the future)
 }
 
 // Lease is a time-bounded exclusive grant (SQS-style visibility timeout).
@@ -299,6 +302,7 @@ enum ErrorCode {
   POLICY_FAULT = 4;
   RATE_LIMITED = 5;
   UNKNOWN_TOKEN = 6;
+  INTERNAL = 7;                         // per-item failure in a best-effort batch
 }
 message StreamError {
   ErrorCode code = 1;

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -49,7 +50,7 @@ func cmdServe(args []string) error {
 	cfg := node.Config{DataDir: "./data", NodeID: "node1"}
 	addr := "127.0.0.1:7100"
 	metricsAddr := "127.0.0.1:7101"
-	var peers string
+	var peers, grpcPeers string
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
 		case "--data":
@@ -65,10 +66,21 @@ func cmdServe(args []string) error {
 		case "--bootstrap":
 			cfg.Bootstrap = args[i+1] == "true"
 		case "--peers":
-			peers = args[i+1] // id1=addr1,id2=addr2,...
+			peers = args[i+1] // id1=raftaddr1,id2=raftaddr2,...
+		case "--grpc-peers":
+			grpcPeers = args[i+1] // id1=grpcaddr1,id2=grpcaddr2,...
+		case "--visibility":
+			if secs, err := strconv.Atoi(args[i+1]); err == nil {
+				cfg.VisibilityMs = uint64(secs) * 1000
+			}
 		}
 	}
 	cfg.InitialPeers = parsePeers(peers)
+	// Build the node-id -> gRPC-addr map for NOT_LEADER redirects (include self).
+	cfg.GRPCAddrs = map[string]string{cfg.NodeID: addr}
+	for _, p := range parsePeers(grpcPeers) {
+		cfg.GRPCAddrs[p.ID] = p.Addr
+	}
 
 	n, err := node.Open(cfg)
 	if err != nil {
@@ -83,7 +95,7 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpc.UnaryInterceptor(transport.LeaderGuardInterceptor(n)))
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))
 	rotav1.RegisterControlServer(srv, transport.NewControl(n))
 

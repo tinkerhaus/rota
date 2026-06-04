@@ -21,14 +21,24 @@ type BrokerService struct {
 func NewBroker(n *node.Node) *BrokerService { return &BrokerService{n: n} }
 
 func (b *BrokerService) Publish(ctx context.Context, req *rotav1.PublishRequest) (*rotav1.PublishResponse, error) {
-	m := req.GetMessage()
+	id, err := b.n.Publish(publishReqFromSpec(req.GetMessage()))
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.PublishResponse{MessageId: id}, nil
+}
+
+// publishReqFromSpec maps a wire MessageSpec to a node.PublishReq.
+func publishReqFromSpec(m *rotav1.MessageSpec) node.PublishReq {
 	r := node.PublishReq{
-		Lane:        m.GetLane(),
-		GroupID:     m.GetGroupId(),
-		Payload:     m.GetPayload(),
-		Headers:     m.GetHeaders(),
-		MaxAttempts: m.GetMaxAttempts(),
-		NotBeforeMs: resolveNotBefore(m),
+		Lane:          m.GetLane(),
+		GroupID:       m.GetGroupId(),
+		Payload:       m.GetPayload(),
+		Headers:       m.GetHeaders(),
+		MaxAttempts:   m.GetMaxAttempts(),
+		NotBeforeMs:   resolveNotBefore(m),
+		IssueToken:    m.GetIssueToken(),
+		ExternalToken: m.GetExternalToken(),
 	}
 	if m.Weight != nil {
 		w := m.GetWeight()
@@ -38,11 +48,29 @@ func (b *BrokerService) Publish(ctx context.Context, req *rotav1.PublishRequest)
 		bs := m.GetBatchSize()
 		r.BatchSize = &bs
 	}
-	id, err := b.n.Publish(r)
+	return r
+}
+
+// PublishBatch applies many publishes in one Raft entry (atomic) or best-effort.
+func (b *BrokerService) PublishBatch(ctx context.Context, req *rotav1.PublishBatchRequest) (*rotav1.PublishBatchResponse, error) {
+	reqs := make([]node.PublishReq, 0, len(req.GetMessages()))
+	for _, m := range req.GetMessages() {
+		reqs = append(reqs, publishReqFromSpec(m))
+	}
+	items, err := b.n.PublishBatch(reqs, req.GetAtomic())
 	if err != nil {
 		return nil, err
 	}
-	return &rotav1.PublishResponse{MessageId: id}, nil
+	resp := &rotav1.PublishBatchResponse{}
+	for _, it := range items {
+		res := &rotav1.PublishItemResult{MessageId: it.MsgID}
+		if !it.OK {
+			res.Code = rotav1.ErrorCode_INTERNAL
+			res.Detail = it.Err
+		}
+		resp.Results = append(resp.Results, res)
+	}
+	return resp, nil
 }
 
 // resolveNotBefore turns the not_before oneof (relative delay OR absolute at)
@@ -103,6 +131,11 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 		case cm := <-recvCh:
 			switch x := cm.Msg.(type) {
 			case *rotav1.WorkClientMsg_LeaseRequest:
+				// Only the leader can serve work; redirect a follower's consumer.
+				if !b.n.IsLeader() {
+					_ = stream.Send(notLeaderFrame(b.n))
+					return nil
+				}
 				if l := x.LeaseRequest.GetLane(); l != "" {
 					lane = l
 				}
@@ -134,6 +167,16 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 					}
 				}
 				_ = b.n.Extend(x.Extend.GetLeaseId(), ttl)
+			case *rotav1.WorkClientMsg_Complete:
+				// In-stream complete-by-token: resolve the message by its token.
+				if inflight > 0 {
+					inflight--
+				}
+				_, _, _ = b.n.Complete(
+					x.Complete.GetExternalToken(),
+					x.Complete.GetOutcome() == rotav1.Outcome_SUCCESS,
+					x.Complete.GetResultMeta(),
+				)
 			}
 		case <-ticker.C:
 		}
@@ -157,6 +200,11 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 		for lane != "" && inflight < credit {
 			lr, ok, err := b.n.LeaseOne(lane, consumerID)
 			if err != nil {
+				// Leadership lost mid-stream: redirect rather than fail opaquely.
+				if !b.n.IsLeader() {
+					_ = stream.Send(notLeaderFrame(b.n))
+					return nil
+				}
 				return err
 			}
 			if !ok {
@@ -170,6 +218,7 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 				Attempt:            lr.Attempt,
 				Headers:            lr.Headers,
 				MessageId:          lr.MsgID,
+				ExternalToken:      lr.ExternalToken, // complete-by-token: empty unless requested
 				VisibilityDeadline: timestamppb.New(time.UnixMilli(int64(lr.DeadlineMs))),
 			}}}
 			if err := stream.Send(out); err != nil {

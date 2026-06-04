@@ -160,6 +160,15 @@ class LeaderClient:
         self._channel = self._dial(leader_addr or self._candidates[0])
         self._stub = self._stub_factory(self._channel)
 
+    def _rotate(self) -> None:
+        """Move to the next candidate target (e.g. the current one is down)."""
+        if self._external_channel is not None or len(self._candidates) <= 1:
+            # Nothing to rotate to: just re-dial the same target (may have recovered).
+            self._switch_to("")
+            return
+        self._candidates.append(self._candidates.pop(0))
+        self._switch_to("")
+
     def _backoff(self, attempt: int) -> None:
         delay = min(self._max_backoff, self._base_backoff * (2 ** attempt))
         time.sleep(delay * (0.5 + random.random() * 0.5))
@@ -174,13 +183,23 @@ class LeaderClient:
             try:
                 return method(request, timeout=timeout)
             except grpc.RpcError as err:
+                last_err = err
                 leader = extract_not_leader(err)
-                if leader is not None:
-                    last_err = err
+                if leader:
+                    # NOT_LEADER with an advertised address: redial the leader.
                     self._switch_to(leader)
-                    if attempt < self._max_retries:
-                        self._backoff(attempt)
-                        continue
+                elif leader == "" or err.code() in (
+                    grpc.StatusCode.UNAVAILABLE,
+                    grpc.StatusCode.DEADLINE_EXCEEDED,
+                ):
+                    # Leaderless redirect, or the node is down/unreachable: try the
+                    # next candidate (this is what makes dead-leader failover work).
+                    self._rotate()
+                else:
+                    raise  # genuine application error — do not retry
+                if attempt < self._max_retries:
+                    self._backoff(attempt)
+                    continue
                 raise
         if last_err is not None:
             raise last_err

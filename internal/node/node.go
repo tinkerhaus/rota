@@ -44,6 +44,11 @@ type Config struct {
 	RaftAdvertise string // defaults to RaftBind
 	Bootstrap     bool   // this node forms the initial cluster
 	InitialPeers  []Peer // voter set for the bootstrapping node (empty ⇒ just self)
+
+	// GRPCAddrs maps node id -> gRPC advertise address, so a follower can tell a
+	// client the LEADER's gRPC address on a NOT_LEADER redirect. Passed to every
+	// node (raft only knows raft addresses).
+	GRPCAddrs map[string]string
 }
 
 type Node struct {
@@ -64,14 +69,16 @@ type Node struct {
 }
 
 type PublishReq struct {
-	Lane        string
-	GroupID     string
-	Payload     []byte
-	Headers     map[string]string
-	Weight      *float64
-	BatchSize   *uint32
-	NotBeforeMs uint64
-	MaxAttempts uint32
+	Lane          string
+	GroupID       string
+	Payload       []byte
+	Headers       map[string]string
+	Weight        *float64
+	BatchSize     *uint32
+	NotBeforeMs   uint64
+	MaxAttempts   uint32
+	IssueToken    bool
+	ExternalToken []byte
 }
 
 func Open(cfg Config) (*Node, error) {
@@ -195,6 +202,14 @@ func (n *Node) LeaderAddr() string {
 	return string(addr)
 }
 
+// LeaderHint returns the current leader's gRPC advertise address (via the
+// configured node-id -> gRPC-addr map; "" if unknown) and its node id. Used to
+// populate NOT_LEADER redirects so a client can re-dial the leader directly.
+func (n *Node) LeaderHint() (grpcAddr, id string) {
+	_, lid := n.raft.LeaderWithID()
+	return n.cfg.GRPCAddrs[string(lid)], string(lid)
+}
+
 func (n *Node) AddVoter(id, addr string) error {
 	return n.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 10*time.Second).Error()
 }
@@ -224,10 +239,12 @@ func (n *Node) apply(cmd fsm.Command) (interface{}, error) {
 	return fut.Response(), nil
 }
 
-func (n *Node) Publish(r PublishReq) (uint64, error) {
+// publishCmd builds a PublishCmd from a PublishReq (one leader clock stamp).
+func publishCmd(r PublishReq) *fsm.PublishCmd {
 	pc := &fsm.PublishCmd{
 		Lane: r.Lane, GroupID: r.GroupID, Payload: r.Payload, Headers: r.Headers,
 		MaxAttempts: r.MaxAttempts, NotBeforeMs: r.NotBeforeMs, NowMs: nowMs(),
+		IssueToken: r.IssueToken, ExternalToken: r.ExternalToken,
 	}
 	if r.Weight != nil {
 		pc.HasWeight = true
@@ -237,7 +254,11 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 		pc.HasBatch = true
 		pc.BatchSize = *r.BatchSize
 	}
-	res, err := n.apply(fsm.Command{Type: fsm.CmdPublish, Publish: pc})
+	return pc
+}
+
+func (n *Node) Publish(r PublishReq) (uint64, error) {
+	res, err := n.apply(fsm.Command{Type: fsm.CmdPublish, Publish: publishCmd(r)})
 	if err != nil {
 		return 0, err
 	}
@@ -247,6 +268,29 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 	}
 	observe.Publishes.Inc()
 	return pr.MsgID, nil
+}
+
+// PublishBatch applies many publishes in a single Raft entry. With atomic=true
+// it is all-or-nothing; otherwise it is best-effort with per-item results.
+func (n *Node) PublishBatch(reqs []PublishReq, atomic bool) ([]fsm.PublishItemResult, error) {
+	items := make([]fsm.PublishCmd, len(reqs))
+	for i, r := range reqs {
+		items[i] = *publishCmd(r)
+	}
+	res, err := n.apply(fsm.Command{Type: fsm.CmdPublishBatch, PublishBatch: &fsm.PublishBatchCmd{Items: items, Atomic: atomic}})
+	if err != nil {
+		return nil, err
+	}
+	br, _ := res.(*fsm.PublishBatchResult)
+	if br == nil {
+		return nil, fmt.Errorf("publish_batch: no result")
+	}
+	for _, it := range br.Items {
+		if it.OK {
+			observe.Publishes.Inc()
+		}
+	}
+	return br.Items, nil
 }
 
 func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error) {
@@ -287,6 +331,20 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 		return nil, false, nil
 	}
 	observe.Leases.Inc()
+	// Complete-by-token: mint (or register a producer-supplied) token now that the
+	// message is leased, and deliver it on the lease so the holder (or an async
+	// callback) can resolve the message out-of-band by token.
+	if lr.ExternalToken != nil {
+		if err := n.registerToken(lr.LeaseID, lr.ExternalToken); err != nil {
+			return nil, false, err
+		}
+	} else if lr.IssueToken {
+		tok, err := n.IssueToken(lr.LeaseID)
+		if err != nil {
+			return nil, false, err
+		}
+		lr.ExternalToken = tok
+	}
 	return lr, true, nil
 }
 

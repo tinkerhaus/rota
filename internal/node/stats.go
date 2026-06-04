@@ -30,6 +30,7 @@ func (n *Node) GroupConfig(lane, group string) GroupConfigInfo {
 type LaneStat struct {
 	Lane          string
 	Leasable      uint64
+	Delayed       uint64
 	Inflight      uint64
 	GroupCount    uint64
 	DLQ           uint64
@@ -59,6 +60,7 @@ func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
 			agg[gm.Lane] = s
 		}
 		s.Leasable += gm.ReadyCount
+		s.Delayed += gm.DelayedCount
 		s.Inflight += gm.InflightCount
 		s.GroupCount++
 	}
