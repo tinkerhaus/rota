@@ -10,12 +10,13 @@ import (
 type Kind string
 
 const (
-	KindDRR            Kind = "drr" // alias for the WFQ default
-	KindWFQ            Kind = "wfq"
-	KindStrictPriority Kind = "strict_priority"
-	KindLottery        Kind = "lottery"
-	KindCEL            Kind = "cel"
-	KindWASM           Kind = "wasm"
+	KindDRR             Kind = "drr" // alias for the WFQ default
+	KindWFQ             Kind = "wfq"
+	KindStrictPriority  Kind = "strict_priority"
+	KindLottery         Kind = "lottery"
+	KindCompletionAware Kind = "completion_aware"
+	KindCEL             Kind = "cel"
+	KindWASM            Kind = "wasm"
 )
 
 // Binding is the durable, replicated description of a lane's policy.
@@ -47,6 +48,8 @@ func Compile(b Binding) (Compiled, error) {
 		return builtinStrict{}, nil
 	case KindLottery:
 		return builtinLottery{}, nil
+	case KindCompletionAware:
+		return builtinCompletionAware{}, nil
 	case KindCEL:
 		return compileCEL(string(b.Source))
 	case KindWASM:

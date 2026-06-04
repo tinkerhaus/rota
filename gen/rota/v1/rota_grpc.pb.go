@@ -234,6 +234,13 @@ const (
 	Control_GetStats_FullMethodName              = "/rota.v1.Control/GetStats"
 	Control_DescribeCluster_FullMethodName       = "/rota.v1.Control/DescribeCluster"
 	Control_Health_FullMethodName                = "/rota.v1.Control/Health"
+	Control_ListGroups_FullMethodName            = "/rota.v1.Control/ListGroups"
+	Control_ListDeadLetters_FullMethodName       = "/rota.v1.Control/ListDeadLetters"
+	Control_ListLeases_FullMethodName            = "/rota.v1.Control/ListLeases"
+	Control_PeekMessages_FullMethodName          = "/rota.v1.Control/PeekMessages"
+	Control_GetLaneFairness_FullMethodName       = "/rota.v1.Control/GetLaneFairness"
+	Control_GetPolicyHealth_FullMethodName       = "/rota.v1.Control/GetPolicyHealth"
+	Control_RedriveDeadLetter_FullMethodName     = "/rota.v1.Control/RedriveDeadLetter"
 )
 
 // ControlClient is the client API for Control service.
@@ -276,6 +283,18 @@ type ControlClient interface {
 	GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*StatsResponse, error)
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*ClusterInfo, error)
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	// Read-only introspection for the operator dashboard. Paginated; follower-servable
+	// (NOT in the leader-guard set) so reads scale off any node's local replica.
+	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error)
+	ListDeadLetters(ctx context.Context, in *ListDeadLettersRequest, opts ...grpc.CallOption) (*ListDeadLettersResponse, error)
+	ListLeases(ctx context.Context, in *ListLeasesRequest, opts ...grpc.CallOption) (*ListLeasesResponse, error)
+	PeekMessages(ctx context.Context, in *PeekMessagesRequest, opts ...grpc.CallOption) (*PeekMessagesResponse, error)
+	// Fairness Observatory (read-only; leader holds the in-memory projection, but
+	// both are follower-servable — a follower simply reports its own local view).
+	GetLaneFairness(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*LaneFairness, error)
+	GetPolicyHealth(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*PolicyHealth, error)
+	// Operator action: re-publish a dead letter onto its lane (mutating; leader-guarded).
+	RedriveDeadLetter(ctx context.Context, in *RedriveDeadLetterRequest, opts ...grpc.CallOption) (*RedriveDeadLetterResponse, error)
 }
 
 type controlClient struct {
@@ -536,6 +555,76 @@ func (c *controlClient) Health(ctx context.Context, in *HealthRequest, opts ...g
 	return out, nil
 }
 
+func (c *controlClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGroupsResponse)
+	err := c.cc.Invoke(ctx, Control_ListGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) ListDeadLetters(ctx context.Context, in *ListDeadLettersRequest, opts ...grpc.CallOption) (*ListDeadLettersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDeadLettersResponse)
+	err := c.cc.Invoke(ctx, Control_ListDeadLetters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) ListLeases(ctx context.Context, in *ListLeasesRequest, opts ...grpc.CallOption) (*ListLeasesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLeasesResponse)
+	err := c.cc.Invoke(ctx, Control_ListLeases_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) PeekMessages(ctx context.Context, in *PeekMessagesRequest, opts ...grpc.CallOption) (*PeekMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PeekMessagesResponse)
+	err := c.cc.Invoke(ctx, Control_PeekMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) GetLaneFairness(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*LaneFairness, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LaneFairness)
+	err := c.cc.Invoke(ctx, Control_GetLaneFairness_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) GetPolicyHealth(ctx context.Context, in *LaneRef, opts ...grpc.CallOption) (*PolicyHealth, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PolicyHealth)
+	err := c.cc.Invoke(ctx, Control_GetPolicyHealth_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlClient) RedriveDeadLetter(ctx context.Context, in *RedriveDeadLetterRequest, opts ...grpc.CallOption) (*RedriveDeadLetterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RedriveDeadLetterResponse)
+	err := c.cc.Invoke(ctx, Control_RedriveDeadLetter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ControlServer is the server API for Control service.
 // All implementations must embed UnimplementedControlServer
 // for forward compatibility.
@@ -576,6 +665,18 @@ type ControlServer interface {
 	GetStats(context.Context, *GetStatsRequest) (*StatsResponse, error)
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*ClusterInfo, error)
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	// Read-only introspection for the operator dashboard. Paginated; follower-servable
+	// (NOT in the leader-guard set) so reads scale off any node's local replica.
+	ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error)
+	ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error)
+	ListLeases(context.Context, *ListLeasesRequest) (*ListLeasesResponse, error)
+	PeekMessages(context.Context, *PeekMessagesRequest) (*PeekMessagesResponse, error)
+	// Fairness Observatory (read-only; leader holds the in-memory projection, but
+	// both are follower-servable — a follower simply reports its own local view).
+	GetLaneFairness(context.Context, *LaneRef) (*LaneFairness, error)
+	GetPolicyHealth(context.Context, *LaneRef) (*PolicyHealth, error)
+	// Operator action: re-publish a dead letter onto its lane (mutating; leader-guarded).
+	RedriveDeadLetter(context.Context, *RedriveDeadLetterRequest) (*RedriveDeadLetterResponse, error)
 	mustEmbedUnimplementedControlServer()
 }
 
@@ -660,6 +761,27 @@ func (UnimplementedControlServer) DescribeCluster(context.Context, *DescribeClus
 }
 func (UnimplementedControlServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
+}
+func (UnimplementedControlServer) ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGroups not implemented")
+}
+func (UnimplementedControlServer) ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDeadLetters not implemented")
+}
+func (UnimplementedControlServer) ListLeases(context.Context, *ListLeasesRequest) (*ListLeasesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLeases not implemented")
+}
+func (UnimplementedControlServer) PeekMessages(context.Context, *PeekMessagesRequest) (*PeekMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PeekMessages not implemented")
+}
+func (UnimplementedControlServer) GetLaneFairness(context.Context, *LaneRef) (*LaneFairness, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLaneFairness not implemented")
+}
+func (UnimplementedControlServer) GetPolicyHealth(context.Context, *LaneRef) (*PolicyHealth, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPolicyHealth not implemented")
+}
+func (UnimplementedControlServer) RedriveDeadLetter(context.Context, *RedriveDeadLetterRequest) (*RedriveDeadLetterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RedriveDeadLetter not implemented")
 }
 func (UnimplementedControlServer) mustEmbedUnimplementedControlServer() {}
 func (UnimplementedControlServer) testEmbeddedByValue()                 {}
@@ -1132,6 +1254,132 @@ func _Control_Health_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Control_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).ListGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_ListGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).ListGroups(ctx, req.(*ListGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_ListDeadLetters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDeadLettersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).ListDeadLetters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_ListDeadLetters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).ListDeadLetters(ctx, req.(*ListDeadLettersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_ListLeases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLeasesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).ListLeases(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_ListLeases_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).ListLeases(ctx, req.(*ListLeasesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_PeekMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PeekMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).PeekMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_PeekMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).PeekMessages(ctx, req.(*PeekMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_GetLaneFairness_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LaneRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).GetLaneFairness(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_GetLaneFairness_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).GetLaneFairness(ctx, req.(*LaneRef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_GetPolicyHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LaneRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).GetPolicyHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_GetPolicyHealth_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).GetPolicyHealth(ctx, req.(*LaneRef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Control_RedriveDeadLetter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RedriveDeadLetterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlServer).RedriveDeadLetter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Control_RedriveDeadLetter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlServer).RedriveDeadLetter(ctx, req.(*RedriveDeadLetterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Control_ServiceDesc is the grpc.ServiceDesc for Control service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1238,6 +1486,34 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Health",
 			Handler:    _Control_Health_Handler,
+		},
+		{
+			MethodName: "ListGroups",
+			Handler:    _Control_ListGroups_Handler,
+		},
+		{
+			MethodName: "ListDeadLetters",
+			Handler:    _Control_ListDeadLetters_Handler,
+		},
+		{
+			MethodName: "ListLeases",
+			Handler:    _Control_ListLeases_Handler,
+		},
+		{
+			MethodName: "PeekMessages",
+			Handler:    _Control_PeekMessages_Handler,
+		},
+		{
+			MethodName: "GetLaneFairness",
+			Handler:    _Control_GetLaneFairness_Handler,
+		},
+		{
+			MethodName: "GetPolicyHealth",
+			Handler:    _Control_GetPolicyHealth_Handler,
+		},
+		{
+			MethodName: "RedriveDeadLetter",
+			Handler:    _Control_RedriveDeadLetter_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

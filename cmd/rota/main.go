@@ -19,8 +19,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
+	"github.com/tinkerhaus/rota/internal/httpapi"
 	"github.com/tinkerhaus/rota/internal/node"
 	"github.com/tinkerhaus/rota/internal/transport"
 )
@@ -50,6 +54,7 @@ func cmdServe(args []string) error {
 	cfg := node.Config{DataDir: "./data", NodeID: "node1"}
 	addr := "127.0.0.1:7100"
 	metricsAddr := "127.0.0.1:7101"
+	webDir := "web/dist"
 	var peers, grpcPeers string
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
@@ -59,6 +64,8 @@ func cmdServe(args []string) error {
 			addr = args[i+1]
 		case "--metrics":
 			metricsAddr = args[i+1]
+		case "--web":
+			webDir = args[i+1]
 		case "--id":
 			cfg.NodeID = args[i+1]
 		case "--raft":
@@ -97,9 +104,21 @@ func cmdServe(args []string) error {
 	}
 	srv := grpc.NewServer(grpc.UnaryInterceptor(transport.LeaderGuardInterceptor(n)))
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))
-	rotav1.RegisterControlServer(srv, transport.NewControl(n))
+	control := transport.NewControl(n)
+	rotav1.RegisterControlServer(srv, control)
 
-	// Metrics + health on a side HTTP port.
+	// Standard gRPC health + server reflection: let grpcurl/k8s probes and the
+	// dashboard discover and health-check the services without out-of-band specs.
+	hsrv := health.NewServer()
+	hsrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	hsrv.SetServingStatus("rota.v1.Broker", healthpb.HealthCheckResponse_SERVING)
+	hsrv.SetServingStatus("rota.v1.Control", healthpb.HealthCheckResponse_SERVING)
+	healthpb.RegisterHealthServer(srv, hsrv)
+	reflection.Register(srv)
+
+	// Metrics + health + the dashboard HTTP/JSON gateway + static SPA, all on the
+	// side HTTP port. /metrics and /healthz are registered explicitly; everything
+	// else (the /api/* routes and the SPA catch-all) is handled by httpapi.
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -110,6 +129,7 @@ func cmdServe(args []string) error {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
+	mux.Handle("/", httpapi.Handler(n, control, webDir))
 	metricsSrv := &http.Server{Addr: metricsAddr, Handler: mux}
 	go func() { _ = metricsSrv.ListenAndServe() }()
 
@@ -121,7 +141,7 @@ func cmdServe(args []string) error {
 		srv.GracefulStop()
 	}()
 
-	fmt.Printf("rota: Broker+Control on %s, metrics on %s (data=%s, id=%s)\n", addr, metricsAddr, cfg.DataDir, cfg.NodeID)
+	fmt.Printf("rota: Broker+Control on %s, metrics+dashboard on %s (data=%s, id=%s, web=%s)\n", addr, metricsAddr, cfg.DataDir, cfg.NodeID, webDir)
 	return srv.Serve(lis)
 }
 

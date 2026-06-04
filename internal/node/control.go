@@ -17,6 +17,7 @@ import (
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/fsm"
+	"github.com/tinkerhaus/rota/internal/observe"
 	"github.com/tinkerhaus/rota/internal/storage"
 )
 
@@ -76,6 +77,34 @@ func (n *Node) DeleteCron(cronID string) error {
 	_, err := n.apply(fsm.Command{Type: fsm.CmdCron, Cron: &fsm.CronCmd{Op: fsm.CronDelete, CronID: cronID}})
 	return err
 }
+
+// PauseCron stops a schedule from firing (its due-timer is removed) until resumed.
+// Idempotent; a pause on an unknown cron is a no-op (GetCron then reports absence).
+func (n *Node) PauseCron(cronID string) error {
+	_, err := n.apply(fsm.Command{Type: fsm.CmdCron, Cron: &fsm.CronCmd{Op: fsm.CronPause, CronID: cronID}})
+	return err
+}
+
+// ResumeCron re-arms a paused schedule, leader-stamping the next fire instant from
+// the live schedule string.
+func (n *Node) ResumeCron(cronID string) error {
+	spec, ok := n.loadCronSpec(cronID)
+	if !ok {
+		return fmt.Errorf("cron %q not found", cronID)
+	}
+	sched, err := cron.ParseStandard(spec.Schedule)
+	if err != nil {
+		return fmt.Errorf("invalid cron schedule: %w", err)
+	}
+	next := uint64(sched.Next(time.Now()).UnixMilli())
+	_, err = n.apply(fsm.Command{Type: fsm.CmdCron, Cron: &fsm.CronCmd{
+		Op: fsm.CronResume, CronID: cronID, NextFireMs: next, NowMs: nowMs(),
+	}})
+	return err
+}
+
+// GetCron returns a single schedule's replicated spec, if present.
+func (n *Node) GetCron(cronID string) (fsm.CronSpec, bool) { return n.loadCronSpec(cronID) }
 
 func (n *Node) ListCron() ([]fsm.CronSpec, error) {
 	lo := storage.CronPrefix()
@@ -315,6 +344,25 @@ func (n *Node) ReapGroup(lane, group string) (bool, error) {
 		return r.Affected > 0, nil
 	}
 	return false, nil
+}
+
+// RedriveDeadLetter re-publishes a dead letter back onto its lane as a fresh
+// READY message (attempt reset) and deletes the DLQ row. Mutating (leader-only).
+// Idempotent: a missing DLQ row returns ok=false with no new message.
+func (n *Node) RedriveDeadLetter(lane, group string, msgID uint64) (bool, uint64, error) {
+	res, err := n.apply(fsm.Command{Type: fsm.CmdRedrive, Redrive: &fsm.RedriveCmd{
+		Lane: lane, GroupID: group, MsgID: msgID, NowMs: nowMs(),
+	}})
+	if err != nil {
+		return false, 0, err
+	}
+	if r, ok := res.(*fsm.RedriveResult); ok {
+		if r.OK {
+			observe.Publishes.Inc() // a redrive enqueues a fresh message
+		}
+		return r.OK, r.NewMsgID, nil
+	}
+	return false, 0, nil
 }
 
 func (n *Node) TeardownGroup(group string) ([]string, uint64, error) {

@@ -66,6 +66,7 @@ var mutatingMethods = map[string]bool{
 	"/rota.v1.Control/SetLaneConfig":         true,
 	"/rota.v1.Control/PauseLane":             true,
 	"/rota.v1.Control/ResumeLane":            true,
+	"/rota.v1.Control/RedriveDeadLetter":     true,
 }
 
 // LeaderGuardInterceptor redirects mutating unary RPCs to the leader (NOT_LEADER

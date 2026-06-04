@@ -38,6 +38,12 @@ type Config struct {
 	VisibilityMs uint64
 	IdleReapMs   uint64 // reap drained groups idle longer than this; 0 = disabled
 
+	// MaxLeaseLifetimeMs caps a single lease's TOTAL lifetime regardless of
+	// ExtendVisibility, so a wedged async (complete-by-token) holder cannot pin a
+	// message in-flight forever. 0 = disabled (default). Intended for long-lived
+	// async leases; enabling it arms one extra timer per lease until the cap.
+	MaxLeaseLifetimeMs uint64
+
 	// Clustering. RaftBind == "" selects the in-memory transport (single-node
 	// dev/test). Otherwise a TCP transport is created on RaftBind.
 	RaftBind      string
@@ -66,6 +72,10 @@ type Node struct {
 	limiters      map[string]*rate.Limiter     // leader-local dequeue rate limiters
 	loadedLaneCfg map[string]fsm.LaneConfigRec // last-applied lane config per lane
 	paused        map[string]int64             // lane -> paused-until unix ms
+
+	// fairness is the leader-only in-memory served-order/served-count projection
+	// that powers the Fairness Observatory (GetLaneFairness + the SSE stream).
+	fairness *fairnessProjection
 }
 
 type PublishReq struct {
@@ -79,7 +89,12 @@ type PublishReq struct {
 	MaxAttempts   uint32
 	IssueToken    bool
 	ExternalToken []byte
+	DedupKey      string // producer idempotency key; "" disables dedup
 }
+
+// dedupWindowMs is how long a dedup_key suppresses re-publishes. Generous enough to
+// absorb client retries/failover, bounded so the index self-sweeps.
+const dedupWindowMs = 5 * 60 * 1000
 
 func Open(cfg Config) (*Node, error) {
 	if cfg.NodeID == "" {
@@ -144,7 +159,7 @@ func Open(cfg Config) (*Node, error) {
 		cfg: cfg, store: st, fsm: f, raft: r, sched: scheduler.New(),
 		cancel: cancel, loadedPolVer: map[string]uint64{},
 		limiters: map[string]*rate.Limiter{}, loadedLaneCfg: map[string]fsm.LaneConfigRec{},
-		paused: map[string]int64{},
+		paused: map[string]int64{}, fairness: newFairnessProjection(),
 	}
 	go n.chronosLoop(ctx)
 	go n.reapLoop(ctx)
@@ -254,6 +269,10 @@ func publishCmd(r PublishReq) *fsm.PublishCmd {
 		pc.HasBatch = true
 		pc.BatchSize = *r.BatchSize
 	}
+	if r.DedupKey != "" {
+		pc.DedupKey = r.DedupKey
+		pc.DedupExpiryMs = pc.NowMs + dedupWindowMs
+	}
 	return pc
 }
 
@@ -266,7 +285,9 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 	if pr == nil {
 		return 0, fmt.Errorf("publish: no result")
 	}
-	observe.Publishes.Inc()
+	if !pr.Duplicate {
+		observe.Publishes.Inc() // a dedup hit enqueued nothing
+	}
 	return pr.MsgID, nil
 }
 
@@ -320,9 +341,13 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	if usedFallback {
 		observe.PolicyFaults.Inc()
 	}
-	res, err := n.apply(fsm.Command{Type: fsm.CmdLease, Lease: &fsm.LeaseCmd{
+	lc := &fsm.LeaseCmd{
 		Lane: lane, GroupID: gid, ConsumerID: consumerID, DeadlineMs: nowMs() + n.cfg.VisibilityMs,
-	}})
+	}
+	if n.cfg.MaxLeaseLifetimeMs > 0 {
+		lc.MaxLifeMs = nowMs() + n.cfg.MaxLeaseLifetimeMs
+	}
+	res, err := n.apply(fsm.Command{Type: fsm.CmdLease, Lease: lc})
 	if err != nil {
 		return nil, false, err
 	}
@@ -331,6 +356,10 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 		return nil, false, nil
 	}
 	observe.Leases.Inc()
+	// Leader-only fairness projection: record the served (lane,group) in order so
+	// the Observatory can render the recent service ribbon and rolling shares.
+	// Cheap (one append + one map bump under a small mutex); never blocks leasing.
+	n.fairness.record(lane, lr.GroupID)
 	// Complete-by-token: mint (or register a producer-supplied) token now that the
 	// message is leased, and deliver it on the lease so the holder (or an async
 	// callback) can resolve the message out-of-band by token.

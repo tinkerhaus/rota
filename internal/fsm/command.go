@@ -23,6 +23,10 @@ const (
 	CmdReapGroup
 	CmdTeardownGroup
 	CmdPublishBatch
+	CmdRedrive
+	CmdWFStartRun
+	CmdWFAppendEvents
+	CmdWFCompleteActivity
 )
 
 type GroupOp uint8
@@ -71,16 +75,87 @@ type Command struct {
 	Fire         *FireTimerCmd    `json:"f,omitempty"`
 	Policy       *PolicyCmd       `json:"pol,omitempty"`
 
-	GroupConfig    *GroupConfigCmd    `json:"gc,omitempty"`
-	GroupLifecycle *GroupLifecycleCmd `json:"gl,omitempty"`
-	Cron           *CronCmd           `json:"cr,omitempty"`
-	FireCron       *FireCronCmd       `json:"fc,omitempty"`
-	IssueToken     *IssueTokenCmd     `json:"it,omitempty"`
-	Complete       *CompleteCmd       `json:"cp,omitempty"`
-	Singleton      *SingletonCmd      `json:"sg,omitempty"`
-	LaneConfig     *LaneConfigCmd     `json:"lc,omitempty"`
-	ReapGroup      *ReapGroupCmd      `json:"rg,omitempty"`
-	Teardown       *TeardownCmd       `json:"td,omitempty"`
+	GroupConfig        *GroupConfigCmd        `json:"gc,omitempty"`
+	GroupLifecycle     *GroupLifecycleCmd     `json:"gl,omitempty"`
+	Cron               *CronCmd               `json:"cr,omitempty"`
+	FireCron           *FireCronCmd           `json:"fc,omitempty"`
+	IssueToken         *IssueTokenCmd         `json:"it,omitempty"`
+	Complete           *CompleteCmd           `json:"cp,omitempty"`
+	Singleton          *SingletonCmd          `json:"sg,omitempty"`
+	LaneConfig         *LaneConfigCmd         `json:"lc,omitempty"`
+	ReapGroup          *ReapGroupCmd          `json:"rg,omitempty"`
+	Teardown           *TeardownCmd           `json:"td,omitempty"`
+	Redrive            *RedriveCmd            `json:"rd,omitempty"`
+	WFStart            *WFStartRunCmd         `json:"wfs,omitempty"`
+	WFAppend           *WFAppendEventsCmd     `json:"wfa,omitempty"`
+	WFCompleteActivity *WFCompleteActivityCmd `json:"wfca,omitempty"`
+}
+
+// ─── Durable execution (Phase 8) ────────────────────────────────────────────────
+
+// WFStartRunCmd creates a workflow run. The leader stamps NowMs; the FSM assigns
+// the run id and seeds a WORKFLOW_STARTED event deterministically.
+type WFStartRunCmd struct {
+	WorkflowType string `json:"wt"`
+	TenantID     string `json:"tid"`
+	Input        []byte `json:"in,omitempty"`
+	ParentRunID  uint64 `json:"prid,omitempty"`
+	NowMs        uint64 `json:"now"`
+}
+
+type WFStartRunResult struct{ RunID uint64 }
+
+// WFEventIn is a proposer-supplied event to append. The proposer supplies the type
+// and opaque attrs; the leader/FSM stamps the gap-free event_id and event_time_ms.
+type WFEventIn struct {
+	Type  int32  `json:"ty"` // rotav1.HistoryEventType
+	Attrs []byte `json:"at,omitempty"`
+}
+
+// WFAppendEventsCmd appends a workflow task's events under OPTIMISTIC CONCURRENCY:
+// it commits only if (RunEpoch, HistorySeq) still match the run's committed state,
+// re-checked inside the atomic Apply batch. This is the committed-divergence fence:
+// a duplicate/stale/racing append against the same version is a benign no-op, never
+// a second divergent commit. See docs/design/durable-execution-design.md §2.
+type WFAppendEventsCmd struct {
+	RunID      uint64      `json:"rid"`
+	RunEpoch   uint32      `json:"re"`
+	HistorySeq uint64      `json:"hs"`
+	Events     []WFEventIn `json:"ev"`
+	NowMs      uint64      `json:"now"`
+}
+
+type WFAppendResult struct {
+	Applied bool
+	Reason  string // "" (applied) | "missing" | "closed" | "stale" | "duplicate_completion" | "invalid_completion"
+	NewSeq  uint64
+}
+
+// WFCompleteActivityCmd records an activity's terminal (COMPLETED/FAILED) as an
+// EXTERNAL event, idempotent by ScheduledEventID via a per-activity done-marker.
+// Unlike a workflow-task append it carries no (epoch, seq) — the marker, not the OCC
+// generation, is what makes an at-least-once redelivery record the outcome once.
+type WFCompleteActivityCmd struct {
+	RunID            uint64 `json:"rid"`
+	ScheduledEventID uint64 `json:"sid"`
+	Success          bool   `json:"ok"`
+	Result           []byte `json:"res,omitempty"`
+	NowMs            uint64 `json:"now"`
+}
+
+// RedriveCmd re-publishes a dead letter back onto its lane as a fresh READY
+// message (attempt reset) and deletes the DLQ row. Idempotent: a missing DLQ
+// row yields OK=false and changes nothing.
+type RedriveCmd struct {
+	Lane    string `json:"lane"`
+	GroupID string `json:"g"`
+	MsgID   uint64 `json:"mid"`
+	NowMs   uint64 `json:"now"`
+}
+
+type RedriveResult struct {
+	OK       bool
+	NewMsgID uint64
 }
 
 type LaneConfigCmd struct {
@@ -188,6 +263,8 @@ type PublishCmd struct {
 	NowMs         uint64            `json:"now,omitempty"`
 	IssueToken    bool              `json:"itk,omitempty"` // mint a completion token at lease time
 	ExternalToken []byte            `json:"etk,omitempty"` // producer-supplied completion token (optional)
+	DedupKey      string            `json:"dk,omitempty"`  // producer idempotency key (optional)
+	DedupExpiryMs uint64            `json:"dx,omitempty"`  // leader-stamped absolute expiry of the dedup window
 }
 
 // PublishBatchCmd applies many publishes in one Raft entry. Atomic ⇒ any item
@@ -199,9 +276,10 @@ type PublishBatchCmd struct {
 }
 
 type PublishItemResult struct {
-	MsgID uint64
-	OK    bool
-	Err   string
+	MsgID     uint64
+	OK        bool
+	Duplicate bool
+	Err       string
 }
 
 type PublishBatchResult struct{ Items []PublishItemResult }
@@ -212,7 +290,8 @@ type LeaseCmd struct {
 	Lane       string `json:"lane"`
 	GroupID    string `json:"g"`
 	ConsumerID string `json:"c"`
-	DeadlineMs uint64 `json:"d"` // absolute visibility deadline, leader-stamped
+	DeadlineMs uint64 `json:"d"`            // absolute visibility deadline, leader-stamped
+	MaxLifeMs  uint64 `json:"ml,omitempty"` // absolute max-lifetime cap; 0 = disabled
 }
 
 type AckCmd struct {
@@ -243,7 +322,12 @@ type FireTimerCmd struct {
 }
 
 // Apply results, returned to the leader's waiting RPC via the raft future.
-type PublishResult struct{ MsgID uint64 }
+// Duplicate is true when a dedup_key matched a live window: MsgID is the ORIGINAL
+// message's id and nothing new was enqueued (idempotent publish).
+type PublishResult struct {
+	MsgID     uint64
+	Duplicate bool
+}
 
 type LeaseResult struct {
 	LeaseID    uint64

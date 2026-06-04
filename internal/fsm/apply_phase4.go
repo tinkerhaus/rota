@@ -88,6 +88,60 @@ func (f *FSM) applyTeardownGroup(b *pebble.Batch, c *TeardownCmd) (interface{}, 
 	return &TeardownResult{AffectedLanes: lanes, Affected: affected}, nil
 }
 
+// applyRedrive re-publishes a dead letter back onto its lane as a fresh READY
+// message (attempt reset to 0, brand-new per-group seq id) and deletes the DLQ
+// row. The DLQ key embeds dead_ts, so the row is found by scanning the (lane,
+// group) prefix for the one whose trailing msg id matches. Idempotent: if no
+// matching DLQ row exists (already redriven, or never dead), it is a no-op.
+func (f *FSM) applyRedrive(b *pebble.Batch, c *RedriveCmd) (interface{}, error) {
+	lo := storage.DLQGroupPrefix(c.Lane, c.GroupID)
+	hi := storage.PrefixEnd(lo)
+	it, err := f.s.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return nil, err
+	}
+	var dlqKey []byte
+	dl := &rotav1.DeadLetter{}
+	for it.First(); it.Valid(); it.Next() {
+		cand := &rotav1.DeadLetter{}
+		if proto.Unmarshal(it.Value(), cand) != nil {
+			continue
+		}
+		if cand.GetOriginal().GetMsgId() == c.MsgID {
+			dlqKey = append([]byte{}, it.Key()...)
+			dl = cand
+			break
+		}
+	}
+	_ = it.Close()
+	if dlqKey == nil {
+		return &RedriveResult{OK: false}, nil // no matching DLQ row ⇒ idempotent no-op
+	}
+
+	orig := dl.GetOriginal()
+	gm := f.loadGroupMeta(c.Lane, c.GroupID)
+	newID, err := f.publishOne(b, &PublishCmd{
+		Lane:          c.Lane,
+		GroupID:       c.GroupID,
+		Payload:       orig.GetPayload(),
+		Headers:       orig.GetHeaders(),
+		MaxAttempts:   orig.GetMaxAttempts(),
+		NowMs:         c.NowMs,
+		IssueToken:    orig.GetIssueToken(),
+		ExternalToken: orig.GetExternalToken(),
+	}, gm)
+	if err != nil {
+		return nil, err
+	}
+	if err := putProto(b, storage.GroupMetaKey(c.Lane, c.GroupID), gm); err != nil {
+		return nil, err
+	}
+	if err := b.Delete(dlqKey, nil); err != nil {
+		return nil, err
+	}
+	return &RedriveResult{OK: true, NewMsgID: newID}, nil
+}
+
 func (f *FSM) applyGroupConfig(b *pebble.Batch, c *GroupConfigCmd) (interface{}, error) {
 	gm := &rotav1.GroupMeta{}
 	found, _ := f.s.GetProto(storage.GroupMetaKey(c.Lane, c.GroupID), gm)
@@ -274,6 +328,21 @@ func (f *FSM) applyIssueToken(b *pebble.Batch, c *IssueTokenCmd) (interface{}, e
 		return nil, err
 	}
 	return &AckResult{OK: true}, b.Set(storage.TokenKey(c.TokenHash), u64b(c.LeaseID), nil)
+}
+
+// deleteLeaseToken removes a lease's completion-token row when the lease is torn
+// down (ack, nack, or visibility-timeout reclaim). Without this, a minted/registered
+// token outlives its lease: the row leaks, and a late Complete(token) would chase a
+// deleted lease. After cleanup a stale completion deterministically reports Unknown.
+//
+// This does NOT defend against a producer reusing the SAME external token across
+// attempts (a fresh lease re-registers it) — that idempotency is the producer's
+// responsibility, fully fenced later by the engine's run_id+step_id+attempt key.
+func deleteLeaseToken(b *pebble.Batch, lease *rotav1.Lease) error {
+	if len(lease.CompletionTokenHash) == 0 {
+		return nil
+	}
+	return b.Delete(storage.TokenKey(lease.CompletionTokenHash), nil)
 }
 
 func (f *FSM) applyComplete(b *pebble.Batch, c *CompleteCmd) (interface{}, error) {

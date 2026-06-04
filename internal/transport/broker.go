@@ -39,6 +39,7 @@ func publishReqFromSpec(m *rotav1.MessageSpec) node.PublishReq {
 		NotBeforeMs:   resolveNotBefore(m),
 		IssueToken:    m.GetIssueToken(),
 		ExternalToken: m.GetExternalToken(),
+		DedupKey:      m.GetDedupKey(),
 	}
 	if m.Weight != nil {
 		w := m.GetWeight()

@@ -24,6 +24,47 @@ func TestBuiltinPolicies(t *testing.T) {
 	}
 }
 
+// completion_aware de-prioritizes a tenant hogging in-flight capacity. Two
+// equal-weight groups at the same virtual time differ ONLY in outstanding
+// (leased-but-unacked) work: the high-inflight group must score LOWER (served
+// later) than the low-inflight one. Plain WFQ, which sees only virtual time,
+// would tie them — so this is exactly the behavior the policy adds.
+func TestCompletionAwarePolicy(t *testing.T) {
+	view := LaneView{Groups: []GroupView{
+		{ID: "hog", Weight: 1, VirtualTime: 0, InFlight: 8},
+		{ID: "lean", Weight: 1, VirtualTime: 0, InFlight: 0},
+	}}
+	c, err := Compile(Binding{Kind: KindCompletionAware})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	defer c.Close()
+	sc, err := c.Score(view, ConsumerView{Credit: 1})
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if !(sc[1] > sc[0]) {
+		t.Fatalf("completion_aware: lean (inflight 0) should outrank hog (inflight 8) at equal weight/vt: %v", sc)
+	}
+
+	// Weight normalizes the in-flight penalty: a heavier group tolerates more
+	// in-flight before it is throttled. Same raw in-flight, higher weight ⇒
+	// higher score (less penalized).
+	view2 := LaneView{Groups: []GroupView{
+		{ID: "light", Weight: 1, VirtualTime: 0, InFlight: 4},
+		{ID: "heavy", Weight: 4, VirtualTime: 0, InFlight: 4},
+	}}
+	sc2, _ := c.Score(view2, ConsumerView{Credit: 1})
+	if !(sc2[1] > sc2[0]) {
+		t.Fatalf("completion_aware: heavier group should absorb in-flight better: %v", sc2)
+	}
+
+	// It must survive policy validation (smoke fixtures) so it can be installed.
+	if err := Validate(Binding{Kind: KindCompletionAware}); err != nil {
+		t.Fatalf("completion_aware failed validation: %v", err)
+	}
+}
+
 func TestCELEngine(t *testing.T) {
 	c, err := Compile(Binding{Kind: KindCEL, Source: []byte("-backlog")})
 	if err != nil {

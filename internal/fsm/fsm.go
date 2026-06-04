@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/pebble"
@@ -94,6 +96,22 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyReapGroup(b, cmd.ReapGroup)
 	case CmdTeardownGroup:
 		res, err = f.applyTeardownGroup(b, cmd.Teardown)
+	case CmdRedrive:
+		res, err = f.applyRedrive(b, cmd.Redrive)
+	case CmdWFStartRun:
+		res, err = f.applyWFStartRun(b, cmd.WFStart)
+	case CmdWFAppendEvents:
+		res, err = f.applyWFAppendEvents(b, cmd.WFAppend)
+	case CmdWFCompleteActivity:
+		res, err = f.applyWFCompleteActivity(b, cmd.WFCompleteActivity)
+	default:
+		// Unknown CmdType: this binary is older than the command set already
+		// committed to the log (a mixed-version rollout, or a downgrade). The old
+		// behaviour — fall through and advance applied_index below without applying
+		// anything — silently and permanently diverges this node from the rest of
+		// the cluster. Halt loudly instead: a crash is recoverable (restart on a
+		// compatible binary resumes from the log); silent divergence is not.
+		panic(fmt.Sprintf("fsm: unknown CmdType %d at raft index %d: this node's binary predates a command in the committed log — upgrade it", cmd.Type, l.Index))
 	}
 	if err != nil {
 		return err
@@ -167,6 +185,11 @@ func (f *FSM) publishOne(b *pebble.Batch, c *PublishCmd, gm *rotav1.GroupMeta) (
 }
 
 func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) {
+	if c.DedupKey != "" {
+		if id, dup := f.checkDedup(c); dup {
+			return &PublishResult{MsgID: id, Duplicate: true}, nil
+		}
+	}
 	gm := f.loadGroupMeta(c.Lane, c.GroupID)
 	id, err := f.publishOne(b, c, gm)
 	if err != nil {
@@ -175,7 +198,58 @@ func (f *FSM) applyPublish(b *pebble.Batch, c *PublishCmd) (interface{}, error) 
 	if err := putProto(b, storage.GroupMetaKey(c.Lane, c.GroupID), gm); err != nil {
 		return nil, err
 	}
+	if c.DedupKey != "" {
+		if err := f.recordDedup(b, c, id); err != nil {
+			return nil, err
+		}
+	}
 	return &PublishResult{MsgID: id}, nil
+}
+
+// ─── Producer idempotency (dedup_key) ───────────────────────────────────────────
+//
+// A dedup row stores the original msg id + the absolute window expiry, so a lazy
+// read can treat an expired row as absent even before its sweep timer fires. The
+// row is leader-stamped (expiry = NowMs + window) and applied deterministically.
+
+func dedupVal(msgID, expiryMs uint64) []byte {
+	v := make([]byte, 16)
+	binary.BigEndian.PutUint64(v[:8], msgID)
+	binary.BigEndian.PutUint64(v[8:], expiryMs)
+	return v
+}
+
+func parseDedupVal(v []byte) (msgID, expiryMs uint64, ok bool) {
+	if len(v) < 16 {
+		return 0, 0, false
+	}
+	return binary.BigEndian.Uint64(v[:8]), binary.BigEndian.Uint64(v[8:]), true
+}
+
+// checkDedup returns (originalMsgID, true) when c.DedupKey is inside a live window.
+// NOTE: it reads committed state, so two items sharing a dedup_key WITHIN one batch
+// are not de-duplicated against each other (only against already-committed publishes).
+func (f *FSM) checkDedup(c *PublishCmd) (uint64, bool) {
+	v, ok, _ := f.s.GetRaw(storage.DedupKey(c.Lane, c.DedupKey))
+	if !ok {
+		return 0, false
+	}
+	msgID, expiry, valid := parseDedupVal(v)
+	if !valid || expiry <= c.NowMs {
+		return 0, false // absent/malformed/expired ⇒ not a duplicate
+	}
+	return msgID, true
+}
+
+// recordDedup writes the dedup row and arms its expiry sweep.
+func (f *FSM) recordDedup(b *pebble.Batch, c *PublishCmd, msgID uint64) error {
+	if c.DedupExpiryMs <= c.NowMs {
+		return nil // no window ⇒ nothing to record
+	}
+	if err := b.Set(storage.DedupKey(c.Lane, c.DedupKey), dedupVal(msgID, c.DedupExpiryMs), nil); err != nil {
+		return err
+	}
+	return addTimer(b, c.DedupExpiryMs, storage.TimerDedupExpiry, storage.DedupRef(c.Lane, c.DedupKey), 0)
 }
 
 // applyPublishBatch applies many publishes in one entry. Same-group items share
@@ -186,6 +260,12 @@ func (f *FSM) applyPublishBatch(b *pebble.Batch, c *PublishBatchCmd) (interface{
 	res := &PublishBatchResult{Items: make([]PublishItemResult, len(c.Items))}
 	for i := range c.Items {
 		item := &c.Items[i]
+		if item.DedupKey != "" {
+			if id, dup := f.checkDedup(item); dup {
+				res.Items[i] = PublishItemResult{MsgID: id, OK: true, Duplicate: true}
+				continue
+			}
+		}
 		key := item.Lane + "\x00" + item.GroupID
 		gm := cache[key]
 		if gm == nil {
@@ -200,6 +280,15 @@ func (f *FSM) applyPublishBatch(b *pebble.Batch, c *PublishBatchCmd) (interface{
 			}
 			res.Items[i] = PublishItemResult{Err: err.Error()}
 			continue
+		}
+		if item.DedupKey != "" {
+			if err := f.recordDedup(b, item, id); err != nil {
+				if c.Atomic {
+					return nil, err
+				}
+				res.Items[i] = PublishItemResult{Err: err.Error()}
+				continue
+			}
 		}
 		res.Items[i] = PublishItemResult{MsgID: id, OK: true}
 	}
@@ -250,6 +339,14 @@ func (f *FSM) applyLease(b *pebble.Batch, c *LeaseCmd) (interface{}, error) {
 	if err := addTimer(b, c.DeadlineMs, storage.TimerLeaseDeadline, storage.LeaseDeadlineRef(leaseID), head.Epoch); err != nil {
 		return nil, err
 	}
+	// Absolute lifetime cap (opt-in): a separate timer that is NOT reset by extends,
+	// so a perpetually-extended or wedged async lease is force-failed at the cap.
+	// Epoch 0 ⇒ not message-epoch-fenced; the fire handler matches on lease id.
+	if c.MaxLifeMs > 0 {
+		if err := addTimer(b, c.MaxLifeMs, storage.TimerLeaseMaxLife, storage.LeaseDeadlineRef(leaseID), 0); err != nil {
+			return nil, err
+		}
+	}
 	if err := putProto(b, storage.MessageKey(c.Lane, c.GroupID, head.MsgId), head); err != nil {
 		return nil, err
 	}
@@ -288,6 +385,9 @@ func (f *FSM) applyAck(b *pebble.Batch, c *AckCmd) (interface{}, error) {
 	if err := b.Delete(storage.LeaseKey(c.LeaseID), nil); err != nil {
 		return nil, err
 	}
+	if err := deleteLeaseToken(b, lease); err != nil {
+		return nil, err
+	}
 	if err := delTimer(b, lease.DeadlineMs, storage.TimerLeaseDeadline, storage.LeaseDeadlineRef(c.LeaseID)); err != nil {
 		return nil, err
 	}
@@ -313,6 +413,9 @@ func (f *FSM) applyNack(b *pebble.Batch, c *NackCmd) (interface{}, error) {
 	}
 	// The lease is going away regardless of mode.
 	if err := b.Delete(storage.LeaseKey(c.LeaseID), nil); err != nil {
+		return nil, err
+	}
+	if err := deleteLeaseToken(b, lease); err != nil {
 		return nil, err
 	}
 	if err := delTimer(b, lease.DeadlineMs, storage.TimerLeaseDeadline, storage.LeaseDeadlineRef(c.LeaseID)); err != nil {
@@ -452,6 +555,9 @@ func (f *FSM) applyFireTimer(b *pebble.Batch, c *FireTimerCmd) (interface{}, err
 					if err := b.Delete(storage.LeaseKey(leaseID), nil); err != nil {
 						return nil, err
 					}
+					if err := deleteLeaseToken(b, lease); err != nil {
+						return nil, err
+					}
 					gm := &rotav1.GroupMeta{}
 					gf, _ := f.s.GetProto(storage.GroupMetaKey(lease.Lane, lease.GroupId), gm)
 					decr(&gm.InflightCount)
@@ -481,6 +587,62 @@ func (f *FSM) applyFireTimer(b *pebble.Batch, c *FireTimerCmd) (interface{}, err
 						if err := putProto(b, storage.GroupMetaKey(lease.Lane, lease.GroupId), gm); err != nil {
 							return nil, err
 						}
+					}
+				}
+			}
+		}
+
+	case storage.TimerLeaseMaxLife:
+		// Absolute lifetime cap: force terminal dead-letter regardless of extends.
+		// Self-cleaning — if the lease already ended (ack/nack/reclaim), this is a
+		// benign no-op and only the timer row below is removed.
+		if leaseID, okRef := storage.ParseLeaseDeadlineRef(c.Ref); okRef {
+			lease := &rotav1.Lease{}
+			if lf, _ := f.s.GetProto(storage.LeaseKey(leaseID), lease); lf {
+				msg := &rotav1.Message{}
+				mf, _ := f.s.GetProto(storage.MessageKey(lease.Lane, lease.GroupId, lease.MsgId), msg)
+				if mf && msg.State == rotav1.MessageState_LEASED && msg.CurLease == leaseID {
+					if err := b.Delete(storage.LeaseKey(leaseID), nil); err != nil {
+						return nil, err
+					}
+					if err := deleteLeaseToken(b, lease); err != nil {
+						return nil, err
+					}
+					_ = delTimer(b, lease.DeadlineMs, storage.TimerLeaseDeadline, storage.LeaseDeadlineRef(leaseID))
+					gm := &rotav1.GroupMeta{}
+					gf, _ := f.s.GetProto(storage.GroupMetaKey(lease.Lane, lease.GroupId), gm)
+					decr(&gm.InflightCount)
+					if err := f.deadLetter(b, msg, "max_lease_lifetime", nil, c.FireAt); err != nil {
+						return nil, err
+					}
+					decr(&gm.TotalCount)
+					if gf {
+						if err := putProto(b, storage.GroupMetaKey(lease.Lane, lease.GroupId), gm); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+		}
+
+	case storage.TimerWFFired:
+		// A durable workflow timer (workflow.sleep) fired: append TIMER_FIRED to the
+		// run. The tidx row (deleted below) is the once-only guard.
+		if runID, startedID, okRef := storage.ParseWFTimerRef(c.Ref); okRef {
+			if err := f.recordTimerFired(b, runID, startedID, c.FireAt); err != nil {
+				return nil, err
+			}
+		}
+
+	case storage.TimerDedupExpiry:
+		if lane, key, okRef := storage.ParseDedupRef(c.Ref); okRef {
+			dk := storage.DedupKey(lane, key)
+			// Only sweep if the window has actually closed — a re-publish that renewed
+			// the key to a LATER expiry must survive this (older) timer firing.
+			if v, ok2, _ := f.s.GetRaw(dk); ok2 {
+				if _, expiry, valid := parseDedupVal(v); valid && expiry <= c.FireAt {
+					if err := b.Delete(dk, nil); err != nil {
+						return nil, err
 					}
 				}
 			}
@@ -519,7 +681,21 @@ func (f *FSM) deadLetter(b *pebble.Batch, msg *rotav1.Message, reason string, me
 	if err := putProto(b, storage.DLQKey(msg.Lane, msg.GroupId, deadTs, msg.MsgId), dl); err != nil {
 		return err
 	}
-	return b.Delete(storage.MessageKey(msg.Lane, msg.GroupId, msg.MsgId), nil)
+	if err := b.Delete(storage.MessageKey(msg.Lane, msg.GroupId, msg.MsgId), nil); err != nil {
+		return err
+	}
+	// Liveness bridge: an activity task that dead-letters must surface to its run as
+	// an ACTIVITY_FAILED event, or the run would wait on it forever. Idempotent via
+	// recordActivityTerminal's done-marker, so it safely races a late success.
+	if strings.HasPrefix(msg.Lane, ActivityLanePrefix) {
+		task := &rotav1.ActivityTask{}
+		if proto.Unmarshal(msg.Payload, task) == nil && task.GetRunId() != 0 {
+			if _, _, _, err := f.recordActivityTerminal(b, task.GetRunId(), task.GetScheduledEventId(), true, []byte("activity_dead_lettered: "+reason), deadTs); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // headReady returns the lowest-msgID READY message of a group, or nil.

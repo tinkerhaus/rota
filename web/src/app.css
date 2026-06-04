@@ -1,0 +1,384 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Rota operator dashboard — design system.
+   Dark, dense, operator-focused. The color language is shared across every view:
+     green  = ready / healthy / leader
+     blue   = inflight / leased
+     orange = delayed / warning
+     red    = dlq / dead / error
+     grey   = paused / idle / nonvoter
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Surfaces — a near-black stack with subtle elevation. */
+  --bg: #0a0c10;
+  --bg-1: #0d1117;
+  --bg-2: #11151c;
+  --bg-3: #161b22;
+  --bg-hover: #1b2230;
+  --border: #232a35;
+  --border-strong: #2f3947;
+
+  /* Text. */
+  --fg: #e6edf3;
+  --fg-dim: #9aa7b4;
+  --fg-faint: #6b7785;
+  --fg-ghost: #475160;
+
+  /* Semantic color language. */
+  --ready: #3fb950;
+  --ready-bg: rgba(63, 185, 80, 0.12);
+  --ready-bd: rgba(63, 185, 80, 0.35);
+
+  --inflight: #58a6ff;
+  --inflight-bg: rgba(88, 166, 255, 0.12);
+  --inflight-bd: rgba(88, 166, 255, 0.35);
+
+  --delayed: #d29922;
+  --delayed-bg: rgba(210, 153, 34, 0.12);
+  --delayed-bd: rgba(210, 153, 34, 0.35);
+
+  --dlq: #f85149;
+  --dlq-bg: rgba(248, 81, 73, 0.12);
+  --dlq-bd: rgba(248, 81, 73, 0.38);
+
+  --paused: #768390;
+  --paused-bg: rgba(118, 131, 144, 0.12);
+  --paused-bd: rgba(118, 131, 144, 0.3);
+
+  --accent: #7c8cff;
+  --accent-glow: rgba(124, 140, 255, 0.25);
+
+  /* Type. */
+  --mono: 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code',
+    Menlo, Consolas, monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background:
+    radial-gradient(900px 500px at 12% -8%, rgba(124, 140, 255, 0.07), transparent 60%),
+    radial-gradient(800px 480px at 100% 0%, rgba(63, 185, 80, 0.05), transparent 55%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--accent-glow);
+}
+
+/* Scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+
+/* ── Reusable atoms ─────────────────────────────────────────────────────────── */
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.dim {
+  color: var(--fg-dim);
+}
+.faint {
+  color: var(--fg-faint);
+}
+
+.muted-zero {
+  color: var(--fg-ghost);
+}
+
+.page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 22px 26px 80px;
+}
+
+.card {
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--fg-faint);
+  margin: 26px 2px 12px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+}
+
+/* Pills / badges */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-3);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.pill.ready {
+  color: var(--ready);
+  background: var(--ready-bg);
+  border-color: var(--ready-bd);
+}
+.pill.inflight {
+  color: var(--inflight);
+  background: var(--inflight-bg);
+  border-color: var(--inflight-bd);
+}
+.pill.delayed {
+  color: var(--delayed);
+  background: var(--delayed-bg);
+  border-color: var(--delayed-bd);
+}
+.pill.dlq {
+  color: var(--dlq);
+  background: var(--dlq-bg);
+  border-color: var(--dlq-bd);
+}
+.pill.paused {
+  color: var(--paused);
+  background: var(--paused-bg);
+  border-color: var(--paused-bd);
+}
+
+/* Color the value text by semantic */
+.c-ready {
+  color: var(--ready);
+}
+.c-inflight {
+  color: var(--inflight);
+}
+.c-delayed {
+  color: var(--delayed);
+}
+.c-dlq {
+  color: var(--dlq);
+}
+.c-paused {
+  color: var(--paused);
+}
+
+/* Dense tables */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.tbl thead th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  padding: 9px 12px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tbl tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.tbl tbody tr {
+  transition: background 0.08s ease;
+}
+.tbl tbody tr:hover {
+  background: var(--bg-hover);
+}
+.tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+.tbl .r {
+  text-align: right;
+}
+.tbl .num {
+  text-align: right;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-3);
+  color: var(--fg);
+  font-weight: 500;
+  font-size: 12px;
+  transition: all 0.1s ease;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.danger {
+  color: var(--dlq);
+  border-color: var(--dlq-bd);
+  background: var(--dlq-bg);
+}
+.btn.danger:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: var(--dlq);
+}
+.btn.sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.kv {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.kv .k {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-faint);
+}
+.kv .v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--fg-faint);
+}
+
+.err-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--dlq-bg);
+  border: 1px solid var(--dlq-bd);
+  color: #ffb3ae;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+
+.spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}

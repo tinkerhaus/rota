@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+# Allow esbuild's postinstall (it fetches/links its platform binary). Without
+# this, pnpm 11 gates the build script and the deps-status check that runs
+# before `pnpm build` treats it as an error.
+onlyBuiltDependencies:
+  - esbuild

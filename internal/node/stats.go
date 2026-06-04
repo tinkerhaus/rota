@@ -1,6 +1,7 @@
 package node
 
 import (
+	"encoding/hex"
 	"strconv"
 
 	"github.com/cockroachdb/pebble"
@@ -10,6 +11,174 @@ import (
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/storage"
 )
+
+// ─── Dashboard read API (paginated, follower-servable) ──────────────────────────
+
+const (
+	defaultPageSize = 100
+	maxPageSize     = 1000
+)
+
+func clampPage(n uint32) int {
+	if n == 0 || int(n) > maxPageSize {
+		return defaultPageSize
+	}
+	return int(n)
+}
+
+// pageStart turns an opaque page token (hex of the previous page's last key) into
+// the inclusive lower bound for the next page — strictly after that last key.
+func pageStart(prefixLo []byte, token string) []byte {
+	if token == "" {
+		return prefixLo
+	}
+	raw, err := hex.DecodeString(token)
+	if err != nil || len(raw) == 0 {
+		return prefixLo
+	}
+	return append(raw, 0x00) // append 0x00 ⇒ smallest key strictly greater than raw
+}
+
+// ListGroupStats returns per-group fairness stats for a lane (the dashboard grid),
+// one page at a time. nextToken is "" once the last page has been returned.
+func (n *Node) ListGroupStats(lane string, pageSize uint32, pageToken string) ([]*rotav1.GroupStats, string, error) {
+	lo := storage.GroupMetaLanePrefix(lane)
+	hi := storage.PrefixEnd(lo)
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: pageStart(lo, pageToken), UpperBound: hi})
+	if err != nil {
+		return nil, "", err
+	}
+	defer it.Close()
+	limit := clampPage(pageSize)
+	var out []*rotav1.GroupStats
+	var lastKey []byte
+	for it.First(); it.Valid(); it.Next() {
+		gm := &rotav1.GroupMeta{}
+		if proto.Unmarshal(it.Value(), gm) != nil {
+			continue
+		}
+		out = append(out, &rotav1.GroupStats{
+			Lane: gm.Lane, GroupId: gm.GroupId, Weight: gm.Weight, Paused: gm.Paused,
+			Ready: gm.ReadyCount, Delayed: gm.DelayedCount, Inflight: gm.InflightCount,
+			Total: gm.TotalCount, VirtualTime: gm.VirtualTime, Deficit: gm.Deficit,
+			LastActivityMs: gm.LastActivityMs,
+		})
+		lastKey = append(lastKey[:0], it.Key()...)
+		if len(out) >= limit {
+			it.Next()
+			if it.Valid() {
+				return out, hex.EncodeToString(lastKey), nil
+			}
+			break
+		}
+	}
+	return out, "", nil
+}
+
+// ListDeadLetters returns a lane's dead letters (the DLQ inspector), one page at a time.
+func (n *Node) ListDeadLetters(lane string, pageSize uint32, pageToken string) ([]*rotav1.DeadLetterInfo, string, error) {
+	lo := storage.DLQLanePrefix(lane)
+	hi := storage.PrefixEnd(lo)
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: pageStart(lo, pageToken), UpperBound: hi})
+	if err != nil {
+		return nil, "", err
+	}
+	defer it.Close()
+	limit := clampPage(pageSize)
+	var out []*rotav1.DeadLetterInfo
+	var lastKey []byte
+	for it.First(); it.Valid(); it.Next() {
+		dl := &rotav1.DeadLetter{}
+		if proto.Unmarshal(it.Value(), dl) != nil {
+			continue
+		}
+		orig := dl.GetOriginal()
+		out = append(out, &rotav1.DeadLetterInfo{
+			Lane: lane, GroupId: orig.GetGroupId(), MsgId: orig.GetMsgId(),
+			FinalAttempt: dl.GetFinalAttempt(), Reason: dl.GetReason(), DeadAtMs: dl.GetDeadAtMs(),
+			FailureHeaders: dl.GetFailureHeaders(), Headers: orig.GetHeaders(), Payload: orig.GetPayload(),
+		})
+		lastKey = append(lastKey[:0], it.Key()...)
+		if len(out) >= limit {
+			it.Next()
+			if it.Valid() {
+				return out, hex.EncodeToString(lastKey), nil
+			}
+			break
+		}
+	}
+	return out, "", nil
+}
+
+// ListLeases returns a lane's in-flight leases (the lease inspector), one page at
+// a time. Leases are keyed globally by lease id (not lane-partitioned on disk),
+// so this scans the whole lease table and filters by lane; the page token is the
+// hex of the last lease key returned. Follower-servable; read-only.
+func (n *Node) ListLeases(lane string, pageSize uint32, pageToken string) ([]*rotav1.LeaseInfo, string, error) {
+	lo, hi := storage.LeaseBounds()
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: pageStart(lo, pageToken), UpperBound: hi})
+	if err != nil {
+		return nil, "", err
+	}
+	defer it.Close()
+	limit := clampPage(pageSize)
+	var out []*rotav1.LeaseInfo
+	var lastKey []byte
+	for it.First(); it.Valid(); it.Next() {
+		ls := &rotav1.Lease{}
+		if proto.Unmarshal(it.Value(), ls) != nil {
+			continue
+		}
+		if ls.Lane != lane {
+			continue // global table; skip other lanes (token still advances over scanned keys)
+		}
+		out = append(out, &rotav1.LeaseInfo{
+			Lane: ls.Lane, GroupId: ls.GroupId, MsgId: ls.MsgId, LeaseId: ls.LeaseId,
+			ConsumerId: ls.ConsumerId, DeadlineMs: ls.DeadlineMs, Attempt: ls.AttemptAtLease,
+			Epoch: ls.Epoch, ExtendCount: ls.ExtendCount,
+		})
+		lastKey = append(lastKey[:0], it.Key()...)
+		if len(out) >= limit {
+			it.Next()
+			if it.Valid() {
+				return out, hex.EncodeToString(lastKey), nil
+			}
+			break
+		}
+	}
+	return out, "", nil
+}
+
+// peekLimit caps a PeekMessages read so a deep group can't be dumped in one call.
+const peekLimit = 200
+
+// PeekMessages returns the head messages of a group without mutating any state
+// (a non-destructive inspector view). Read-only; follower-servable.
+func (n *Node) PeekMessages(lane, group string, limit uint32) ([]*rotav1.MessagePeek, error) {
+	lo := storage.MessagePrefix(lane, group)
+	hi := storage.PrefixEnd(lo)
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	cap := int(limit)
+	if cap <= 0 || cap > peekLimit {
+		cap = peekLimit
+	}
+	var out []*rotav1.MessagePeek
+	for it.First(); it.Valid() && len(out) < cap; it.Next() {
+		m := &rotav1.Message{}
+		if proto.Unmarshal(it.Value(), m) != nil {
+			continue
+		}
+		out = append(out, &rotav1.MessagePeek{
+			MsgId: m.MsgId, State: m.State, Attempt: m.Attempt,
+			EnqueueMs: m.EnqueueMs, NotBeforeMs: m.NotBeforeMs,
+		})
+	}
+	return out, nil
+}
 
 type GroupConfigInfo struct {
 	Weight    float64

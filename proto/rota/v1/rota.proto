@@ -70,6 +70,21 @@ service Control {
   rpc GetStats(GetStatsRequest) returns (StatsResponse);
   rpc DescribeCluster(DescribeClusterRequest) returns (ClusterInfo);
   rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Read-only introspection for the operator dashboard. Paginated; follower-servable
+  // (NOT in the leader-guard set) so reads scale off any node's local replica.
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);            // per-group fairness grid
+  rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse); // DLQ inspector
+  rpc ListLeases(ListLeasesRequest) returns (ListLeasesResponse);            // in-flight lease inspector
+  rpc PeekMessages(PeekMessagesRequest) returns (PeekMessagesResponse);      // non-destructive group head read
+
+  // Fairness Observatory (read-only; leader holds the in-memory projection, but
+  // both are follower-servable — a follower simply reports its own local view).
+  rpc GetLaneFairness(LaneRef) returns (LaneFairness);   // per-group fairness snapshot
+  rpc GetPolicyHealth(LaneRef) returns (PolicyHealth);   // policy version / quarantine / fault state
+
+  // Operator action: re-publish a dead letter onto its lane (mutating; leader-guarded).
+  rpc RedriveDeadLetter(RedriveDeadLetterRequest) returns (RedriveDeadLetterResponse);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -373,6 +388,10 @@ enum PolicyKind {
   WFQ = 3;
   LOTTERY = 4;
   CUSTOM = 5;
+  // Completion-aware WFQ: ranks by virtual time inflated by in-flight/weight, so
+  // a tenant hogging leased-but-unacked capacity is de-prioritized, not just one
+  // that takes many lease-turns. A built-in (engine "builtin", empty code).
+  COMPLETION_AWARE = 6;
 }
 enum PolicyMode {
   POLICY_MODE_UNSPECIFIED = 0;
@@ -501,6 +520,140 @@ message LaneStats {
   uint64 group_count = 10;
   uint64 policy_version = 11;
 }
+
+// ─── Dashboard read API (paginated) ─────────────────────────────────────────────
+
+message ListGroupsRequest {
+  string lane = 1;                      // required
+  uint32 page_size = 2;                 // 0 => server default (100); capped
+  string page_token = 3;                // opaque; empty => first page
+}
+message GroupStats {
+  string lane = 1;
+  string group_id = 2;
+  double weight = 3;
+  bool paused = 4;
+  uint64 ready = 5;
+  uint64 delayed = 6;
+  uint64 inflight = 7;
+  uint64 total = 8;
+  double virtual_time = 9;              // WFQ fairness clock (the grid's fairness signal)
+  double deficit = 10;
+  uint64 last_activity_ms = 11;
+}
+message ListGroupsResponse {
+  repeated GroupStats groups = 1;
+  string next_page_token = 2;           // empty => no more pages
+}
+
+message ListDeadLettersRequest {
+  string lane = 1;                      // required
+  uint32 page_size = 2;
+  string page_token = 3;
+}
+message DeadLetterInfo {
+  string lane = 1;
+  string group_id = 2;
+  uint64 msg_id = 3;
+  uint32 final_attempt = 4;
+  string reason = 5;                    // max_attempts | terminal_nack | ttl | max_lease_lifetime
+  uint64 dead_at_ms = 6;
+  map<string, string> failure_headers = 7;
+  map<string, string> headers = 8;      // original message headers
+  bytes payload = 9;
+}
+message ListDeadLettersResponse {
+  repeated DeadLetterInfo dead_letters = 1;
+  string next_page_token = 2;
+}
+
+// In-flight lease inspector. Leases are keyed globally by lease id; the server
+// iterates the lease table and filters to the requested lane.
+message ListLeasesRequest {
+  string lane = 1;                      // required
+  uint32 page_size = 2;
+  string page_token = 3;
+}
+message LeaseInfo {
+  string lane = 1;
+  string group_id = 2;
+  uint64 msg_id = 3;
+  uint64 lease_id = 4;
+  string consumer_id = 5;
+  uint64 deadline_ms = 6;
+  uint32 attempt = 7;
+  uint32 epoch = 8;
+  uint32 extend_count = 9;
+}
+message ListLeasesResponse {
+  repeated LeaseInfo leases = 1;
+  string next_page_token = 2;
+}
+
+// Non-destructive read of the head messages of a group (no state change).
+message PeekMessagesRequest {
+  string lane = 1;                      // required
+  string group_id = 2;                  // required
+  uint32 limit = 3;                     // capped server-side (<=200)
+}
+message MessagePeek {
+  uint64 msg_id = 1;
+  MessageState state = 2;
+  uint32 attempt = 3;
+  uint64 enqueue_ms = 4;
+  uint64 not_before_ms = 5;
+}
+message PeekMessagesResponse {
+  repeated MessagePeek messages = 1;
+}
+
+// ─── Fairness Observatory ───────────────────────────────────────────────────────
+//
+// A read-only, per-lane fairness snapshot derived from durable GroupMeta plus the
+// leader's in-memory served-events projection (rolling window). It answers "is
+// this lane fair right now, and who is starving?" without exposing scheduler
+// internals.
+
+// GroupFairness is the fairness state of one group in a lane.
+message GroupFairness {
+  string group_id = 1;
+  double weight = 2;
+  double expected_share = 3;   // weight / sum(weight over active groups)
+  double actual_share = 4;     // served / total_served (rolling window)
+  double virtual_time = 5;     // WFQ fairness clock (broker-maintained)
+  double deficit = 6;          // how far behind the lane's max virtual time
+  uint64 served = 7;           // served count in the rolling window
+  double starvation_score = 8; // (now - last_served) * backlog * max(0, expected-actual), normalized [0,1]
+  bool paused = 9;
+}
+message LaneFairness {
+  string lane = 1;
+  repeated GroupFairness groups = 2;
+  uint64 total_served = 3;      // total served across the lane in the rolling window
+}
+
+// PolicyHealth is the live scheduling-policy status for a lane: which built-in /
+// custom policy is bound, whether it has been quarantined after repeated faults,
+// and the cumulative fallback-to-WFQ fault count.
+message PolicyHealth {
+  string lane = 1;
+  uint64 version = 2;
+  bool quarantined = 3;
+  string engine = 4;           // "builtin" | "cel" | "wasm"
+  uint64 faults = 5;           // fallback-to-WFQ evaluations observed
+}
+
+// Redrive a dead letter back onto its lane as a fresh READY message (attempt
+// reset), deleting the DLQ row. Idempotent: a missing DLQ row is a no-op.
+message RedriveDeadLetterRequest {
+  string lane = 1;                      // required
+  string group_id = 2;                  // required
+  uint64 msg_id = 3;                    // required
+}
+message RedriveDeadLetterResponse {
+  bool ok = 1;                          // false => no matching DLQ row (already redriven/absent)
+  uint64 new_msg_id = 2;                // the re-published message's new per-group id
+}
 message DescribeClusterRequest {}
 message ClusterInfo {
   string leader_id = 1;
@@ -519,4 +672,103 @@ message HealthResponse {
   bool serving = 1;
   bool has_quorum = 2;
   bool is_leader = 3;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Durable execution (Phase 8). These are the engine-PRIVATE stored types: a
+// workflow run and its append-only, per-run, totally-ordered event history. The
+// history is the system of record for deterministic replay; it is addressed by
+// run_id and never exposed as a consumer-subscribable stream (broker non-goal
+// preserved — see docs/design/non-goals-reevaluation.md).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum WorkflowStatus {
+  WF_PENDING = 0;
+  WF_RUNNING = 1;
+  WF_COMPLETED = 2;
+  WF_FAILED = 3;
+  WF_CANCELED = 4;
+  WF_CONTINUED = 5;   // closed via continue-as-new (a successor run carries on)
+}
+
+// HistoryEventType is the kind of a recorded event. Command-events (produced by a
+// worker's workflow task and validated by the leader) and external events
+// (appended by the leader on its own authority) share this enum; the engine knows
+// which are which.
+enum HistoryEventType {
+  HET_UNSPECIFIED = 0;
+  HET_WORKFLOW_STARTED = 1;
+  HET_WORKFLOW_TASK_SCHEDULED = 2;
+  HET_WORKFLOW_TASK_COMPLETED = 3;
+  HET_ACTIVITY_SCHEDULED = 4;
+  HET_ACTIVITY_COMPLETED = 5;
+  HET_ACTIVITY_FAILED = 6;
+  HET_TIMER_STARTED = 7;
+  HET_TIMER_FIRED = 8;
+  HET_SIGNAL_RECEIVED = 9;
+  HET_MARKER_RECORDED = 10;
+  HET_WORKFLOW_COMPLETED = 11;
+  HET_WORKFLOW_FAILED = 12;
+  HET_WORKFLOW_CANCELED = 13;
+  HET_WORKFLOW_CONTINUED_AS_NEW = 14;
+}
+
+// HistoryEvent is one entry in a run's history. event_id is a per-run monotonic
+// gap-free sequence assigned in Apply; event_time_ms is leader-stamped. attrs is
+// the type-specific payload (kept opaque at the kernel layer; the SDK encodes it).
+message HistoryEvent {
+  uint64 event_id = 1;
+  HistoryEventType event_type = 2;
+  uint64 event_time_ms = 3;
+  bytes attrs = 4;
+}
+
+// WorkflowRun (RunMeta) is the quorum-written run record — the GroupMeta analogue
+// for the engine. cur_history_seq is the highest committed event_id; run_epoch is a
+// generation bumped on every workflow-task append, used as the optimistic-
+// concurrency fence so two appends against the same (epoch, seq) cannot both commit.
+message WorkflowRun {
+  uint64 run_id = 1;
+  string workflow_type = 2;            // = lane, for fair dispatch later
+  string tenant_id = 3;                // = group_id, the fairness unit
+  WorkflowStatus status = 4;
+  uint32 run_epoch = 5;
+  uint64 cur_history_seq = 6;
+  bytes input = 7;
+  uint64 started_ms = 8;
+  uint64 last_event_ms = 9;
+  uint64 parent_run_id = 10;           // 0 for a root run
+}
+
+// Activity dispatch (Phase 8). An ACTIVITY_SCHEDULED history event carries these
+// attrs; on apply the engine publishes an ActivityTask message onto __act/<type>
+// (group = tenant) so a NORMAL worker leases it — activities ARE leases. The task
+// payload carries run_id + scheduled_event_id so the completion routes back into
+// the run's history.
+message ActivityScheduledAttrs {
+  string activity_type = 1;
+  string tenant_id = 2;
+  bytes input = 3;
+}
+message ActivityCompletedAttrs {
+  uint64 scheduled_event_id = 1;
+  bool success = 2;
+  bytes result = 3;
+}
+message ActivityTask {
+  uint64 run_id = 1;
+  uint64 scheduled_event_id = 2;
+  string activity_type = 3;
+  bytes input = 4;
+}
+
+// Durable timer (workflow.sleep) event attrs. TIMER_STARTED carries the
+// leader-stamped absolute fire time; on apply the engine arms a TimerWFFired entry
+// on the unified time wheel. When it fires, TIMER_FIRED is appended referencing the
+// started event so a replaying worker resolves its sleep deterministically.
+message TimerStartedAttrs {
+  uint64 fire_at_ms = 1;
+}
+message TimerFiredAttrs {
+  uint64 started_event_id = 1;
 }

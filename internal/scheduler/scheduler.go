@@ -91,6 +91,18 @@ func (s *Scheduler) Quarantined(lane string) bool {
 	return ls != nil && ls.quarantined
 }
 
+// Faults reports the fallback-to-WFQ fault count in the current quarantine
+// window for a lane (0 if the lane has no policy or has not faulted). Read-only.
+func (s *Scheduler) Faults(lane string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ls := s.lanes[lane]
+	if ls == nil {
+		return 0
+	}
+	return ls.faults
+}
+
 // Pick chooses the next group to serve one message from. usedFallback reports
 // that the lane's policy faulted and WFQ was used for this tick.
 func (s *Scheduler) Pick(lane string, active []GroupStat, nowMs int64) (gid string, usedFallback bool, ok bool) {

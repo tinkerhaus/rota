@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
+	"github.com/tinkerhaus/rota/internal/fsm"
 	"github.com/tinkerhaus/rota/internal/node"
 	"github.com/tinkerhaus/rota/internal/policy"
 )
@@ -90,6 +91,8 @@ func bindingFromProto(src *rotav1.PolicySource) policy.Binding {
 		k = policy.KindStrictPriority
 	case rotav1.PolicyKind_LOTTERY:
 		k = policy.KindLottery
+	case rotav1.PolicyKind_COMPLETION_AWARE:
+		k = policy.KindCompletionAware
 	default: // CUSTOM
 		if src.GetEngine() == "wasm" {
 			k = policy.KindWASM
@@ -109,6 +112,8 @@ func protoFromBinding(b policy.Binding) *rotav1.PolicySource {
 		src.Kind = rotav1.PolicyKind_STRICT_PRIORITY
 	case policy.KindLottery:
 		src.Kind = rotav1.PolicyKind_LOTTERY
+	case policy.KindCompletionAware:
+		src.Kind = rotav1.PolicyKind_COMPLETION_AWARE
 	case policy.KindCEL:
 		src.Kind, src.Engine = rotav1.PolicyKind_CUSTOM, "cel"
 	case policy.KindWASM:
@@ -163,10 +168,7 @@ func (c *ControlService) ListCron(ctx context.Context, req *rotav1.ListCronReque
 		if req.GetLane() != "" && s.Lane != req.GetLane() {
 			continue
 		}
-		resp.Crons = append(resp.Crons, &rotav1.CronInfo{
-			CronId: s.CronID, Lane: s.Lane, Schedule: s.Schedule,
-			NextFireMs: s.NextFireMs, LastFireMs: s.LastFireMs, Paused: s.Paused,
-		})
+		resp.Crons = append(resp.Crons, cronInfo(s))
 	}
 	return resp, nil
 }
@@ -176,6 +178,24 @@ func (c *ControlService) DeleteCron(ctx context.Context, req *rotav1.CronRef) (*
 		return nil, err
 	}
 	return &rotav1.CronOpResult{Existed: true}, nil
+}
+
+func (c *ControlService) PauseCron(ctx context.Context, req *rotav1.CronRef) (*rotav1.CronInfo, error) {
+	if err := c.n.PauseCron(req.GetCronId()); err != nil {
+		return nil, err
+	}
+	s, ok := c.n.GetCron(req.GetCronId())
+	if !ok {
+		return nil, status.Error(codes.NotFound, "cron not found")
+	}
+	return cronInfo(s), nil
+}
+
+func cronInfo(s fsm.CronSpec) *rotav1.CronInfo {
+	return &rotav1.CronInfo{
+		CronId: s.CronID, Lane: s.Lane, Schedule: s.Schedule,
+		NextFireMs: s.NextFireMs, LastFireMs: s.LastFireMs, Paused: s.Paused,
+	}
 }
 
 // ─── Singleton ──────────────────────────────────────────────────────────────────
@@ -229,12 +249,66 @@ func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsReque
 	}
 	resp := &rotav1.StatsResponse{}
 	for _, s := range stats {
+		// NOTE: this is a point-in-time depth aggregate over group metadata. The
+		// EWMA rate fields (publish_rate/lease_rate/ack_rate) and oldest_age_ms are
+		// deliberately left zero here — a rate needs time-series sampling, which is
+		// owned by the leader's in-memory fairness projection (Phase 7), not this
+		// stateless snapshot RPC. They are surfaced over the dashboard SSE stream,
+		// not GetStats. Do not read them as "no activity".
 		resp.Lanes = append(resp.Lanes, &rotav1.LaneStats{
 			Lane: s.Lane, Leasable: s.Leasable, Delayed: s.Delayed, Inflight: s.Inflight,
 			DlqDepth: s.DLQ, GroupCount: s.GroupCount, PolicyVersion: s.PolicyVersion,
 		})
 	}
 	return resp, nil
+}
+
+func (c *ControlService) ListGroups(ctx context.Context, req *rotav1.ListGroupsRequest) (*rotav1.ListGroupsResponse, error) {
+	groups, next, err := c.n.ListGroupStats(req.GetLane(), req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.ListGroupsResponse{Groups: groups, NextPageToken: next}, nil
+}
+
+func (c *ControlService) ListDeadLetters(ctx context.Context, req *rotav1.ListDeadLettersRequest) (*rotav1.ListDeadLettersResponse, error) {
+	dls, next, err := c.n.ListDeadLetters(req.GetLane(), req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.ListDeadLettersResponse{DeadLetters: dls, NextPageToken: next}, nil
+}
+
+func (c *ControlService) ListLeases(ctx context.Context, req *rotav1.ListLeasesRequest) (*rotav1.ListLeasesResponse, error) {
+	leases, next, err := c.n.ListLeases(req.GetLane(), req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.ListLeasesResponse{Leases: leases, NextPageToken: next}, nil
+}
+
+func (c *ControlService) PeekMessages(ctx context.Context, req *rotav1.PeekMessagesRequest) (*rotav1.PeekMessagesResponse, error) {
+	msgs, err := c.n.PeekMessages(req.GetLane(), req.GetGroupId(), req.GetLimit())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.PeekMessagesResponse{Messages: msgs}, nil
+}
+
+func (c *ControlService) GetLaneFairness(ctx context.Context, req *rotav1.LaneRef) (*rotav1.LaneFairness, error) {
+	return c.n.LaneFairness(req.GetLane())
+}
+
+func (c *ControlService) GetPolicyHealth(ctx context.Context, req *rotav1.LaneRef) (*rotav1.PolicyHealth, error) {
+	return c.n.PolicyHealth(req.GetLane()), nil
+}
+
+func (c *ControlService) RedriveDeadLetter(ctx context.Context, req *rotav1.RedriveDeadLetterRequest) (*rotav1.RedriveDeadLetterResponse, error) {
+	ok, newID, err := c.n.RedriveDeadLetter(req.GetLane(), req.GetGroupId(), req.GetMsgId())
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.RedriveDeadLetterResponse{Ok: ok, NewMsgId: newID}, nil
 }
 
 func (c *ControlService) DescribeCluster(ctx context.Context, req *rotav1.DescribeClusterRequest) (*rotav1.ClusterInfo, error) {
