@@ -130,8 +130,8 @@
     border-bottom: none;
   }
   .srow.warn {
-    border-left-color: var(--delayed);
-    background: var(--delayed-bg);
+    border-left-color: var(--active);
+    background: var(--inflight-bg);
   }
   .srow.crit {
     border-left-color: var(--dlq);
@@ -179,7 +179,7 @@
     transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .mfill.warn {
-    background: var(--delayed);
+    background: var(--active);
   }
   .mfill.crit {
     background: var(--dlq);
@@ -193,7 +193,7 @@
     color: var(--fg-dim);
   }
   .score.warn {
-    color: var(--delayed);
+    color: var(--active);
   }
   .score.crit {
     color: var(--dlq);

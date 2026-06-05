@@ -1,6 +1,9 @@
 package integration
 
 import (
+	"context"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -215,5 +218,253 @@ func TestWorkflowDurableTimer(t *testing.T) {
 	}
 	if run, _ = n.GetRun(runID); run.GetStatus() != rotav1.WorkflowStatus_WF_COMPLETED {
 		t.Fatalf("status = %v, want WF_COMPLETED", run.GetStatus())
+	}
+}
+
+// The full loop driven by REAL polling workers (no hand-driven decisions): a
+// workflow worker leases tasks and decides; an activity worker runs the activity.
+// StartWorkflow alone must carry the run to completion, with the activity run once.
+func TestWorkflowWorkerDriven(t *testing.T) {
+	n := openNode(t, 60_000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var charged int32
+	go n.RunActivityWorker(ctx, "charge", "act-worker", func(task *rotav1.ActivityTask) ([]byte, bool) {
+		atomic.AddInt32(&charged, 1)
+		return []byte("charged"), true
+	})
+
+	// Deterministic decider: schedule the charge once, then complete once it's done.
+	decide := func(runID uint64, history []*rotav1.HistoryEvent) []node.WorkflowCommand {
+		var scheduled, completed bool
+		for _, e := range history {
+			switch e.GetEventType() {
+			case rotav1.HistoryEventType_HET_ACTIVITY_SCHEDULED:
+				scheduled = true
+			case rotav1.HistoryEventType_HET_ACTIVITY_COMPLETED:
+				completed = true
+			}
+		}
+		switch {
+		case !scheduled:
+			return []node.WorkflowCommand{{Kind: "schedule_activity", ActivityType: "charge", Input: []byte("100")}}
+		case completed:
+			return []node.WorkflowCommand{{Kind: "complete_workflow", Result: []byte("done")}}
+		default:
+			return nil // activity in flight: wait
+		}
+	}
+	go n.RunWorkflowWorker(ctx, "order", "wf-worker", decide)
+
+	runID, err := n.StartWorkflow("order", "tenant-A", []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := false
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && !done {
+		if run, ok := n.GetRun(runID); ok && run.GetStatus() == rotav1.WorkflowStatus_WF_COMPLETED {
+			done = true
+		} else {
+			time.Sleep(40 * time.Millisecond)
+		}
+	}
+	if !done {
+		t.Fatal("workflow did not complete under worker drive within 10s")
+	}
+	if c := atomic.LoadInt32(&charged); c != 1 {
+		t.Fatalf("activity ran %d times, want exactly 1 (idempotent under the loop)", c)
+	}
+}
+
+// Robustness: many concurrent runs driven by the same worker pool must each
+// complete independently (per-run head-of-line via group = run_id), with their
+// activities each running exactly once.
+func TestWorkflowConcurrentRuns(t *testing.T) {
+	n := openNode(t, 60_000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var activityRuns int32
+	go n.RunActivityWorker(ctx, "step", "act-worker", func(task *rotav1.ActivityTask) ([]byte, bool) {
+		atomic.AddInt32(&activityRuns, 1)
+		return []byte("ok"), true
+	})
+	decide := func(runID uint64, history []*rotav1.HistoryEvent) []node.WorkflowCommand {
+		var scheduled, completed bool
+		for _, e := range history {
+			switch e.GetEventType() {
+			case rotav1.HistoryEventType_HET_ACTIVITY_SCHEDULED:
+				scheduled = true
+			case rotav1.HistoryEventType_HET_ACTIVITY_COMPLETED:
+				completed = true
+			}
+		}
+		switch {
+		case !scheduled:
+			return []node.WorkflowCommand{{Kind: "schedule_activity", ActivityType: "step"}}
+		case completed:
+			return []node.WorkflowCommand{{Kind: "complete_workflow"}}
+		default:
+			return nil
+		}
+	}
+	// Two workflow workers to exercise concurrent task processing.
+	go n.RunWorkflowWorker(ctx, "batch", "wf-worker-1", decide)
+	go n.RunWorkflowWorker(ctx, "batch", "wf-worker-2", decide)
+
+	const N = 25
+	runIDs := make([]uint64, N)
+	for i := 0; i < N; i++ {
+		id, err := n.StartWorkflow("batch", "tenant-"+strconv.Itoa(i%4), nil)
+		if err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+		runIDs[i] = id
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		allDone := true
+		for _, id := range runIDs {
+			if run, ok := n.GetRun(id); !ok || run.GetStatus() != rotav1.WorkflowStatus_WF_COMPLETED {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	for _, id := range runIDs {
+		run, _ := n.GetRun(id)
+		if run.GetStatus() != rotav1.WorkflowStatus_WF_COMPLETED {
+			t.Fatalf("run %d status = %v, want WF_COMPLETED", id, run.GetStatus())
+		}
+	}
+	if c := atomic.LoadInt32(&activityRuns); c != N {
+		t.Fatalf("activities ran %d times, want exactly %d (one per run)", c, N)
+	}
+}
+
+// A workflow that waits for a signal stays RUNNING until SignalWorkflow delivers
+// SIGNAL_RECEIVED, which dispatches a task that lets it complete.
+func TestWorkflowSignal(t *testing.T) {
+	n := openNode(t, 60_000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	decide := func(runID uint64, history []*rotav1.HistoryEvent) []node.WorkflowCommand {
+		for _, e := range history {
+			if e.GetEventType() == rotav1.HistoryEventType_HET_SIGNAL_RECEIVED {
+				return []node.WorkflowCommand{{Kind: "complete_workflow"}}
+			}
+		}
+		return nil // no signal yet: wait
+	}
+	go n.RunWorkflowWorker(ctx, "approval", "wf-worker", decide)
+
+	runID, err := n.StartWorkflow("approval", "t", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Let the worker process the initial task (it decides to wait).
+	time.Sleep(400 * time.Millisecond)
+	if run, _ := n.GetRun(runID); run.GetStatus() != rotav1.WorkflowStatus_WF_RUNNING {
+		t.Fatalf("run should be RUNNING before the signal, got %v", run.GetStatus())
+	}
+
+	if err := n.SignalWorkflow(runID, "proceed", []byte("yes")); err != nil {
+		t.Fatal(err)
+	}
+
+	done := false
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !done {
+		if run, ok := n.GetRun(runID); ok && run.GetStatus() == rotav1.WorkflowStatus_WF_COMPLETED {
+			done = true
+		} else {
+			time.Sleep(40 * time.Millisecond)
+		}
+	}
+	if !done {
+		t.Fatal("workflow did not complete after the signal was delivered")
+	}
+}
+
+// continue-as-new closes a run and spawns a successor with carried input and fresh
+// history. A counting workflow loops via continue-as-new until done; each run's
+// history stays bounded, and the chain links parent→child.
+func TestWorkflowContinueAsNew(t *testing.T) {
+	n := openNode(t, 60_000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// count carried in WORKFLOW_STARTED input (history[0]); loop 0→1→2→3 then complete.
+	decide := func(runID uint64, history []*rotav1.HistoryEvent) []node.WorkflowCommand {
+		count := 0
+		if len(history) > 0 {
+			count, _ = strconv.Atoi(string(history[0].GetAttrs()))
+		}
+		if count < 3 {
+			return []node.WorkflowCommand{{Kind: "continue_as_new", Input: []byte(strconv.Itoa(count + 1))}}
+		}
+		return []node.WorkflowCommand{{Kind: "complete_workflow"}}
+	}
+	go n.RunWorkflowWorker(ctx, "counter", "wf-worker", decide)
+
+	first, err := n.StartWorkflow("counter", "t", []byte("0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until a COMPLETED run exists (the end of the chain).
+	var completedID uint64
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && completedID == 0 {
+		runs, _, _ := n.ListWorkflowRuns(0, false, 100, "")
+		for _, r := range runs {
+			if r.GetStatus() == rotav1.WorkflowStatus_WF_COMPLETED {
+				completedID = r.GetRunId()
+			}
+		}
+		if completedID == 0 {
+			time.Sleep(40 * time.Millisecond)
+		}
+	}
+	if completedID == 0 {
+		t.Fatal("continue-as-new chain never reached a COMPLETED run")
+	}
+
+	// 4 runs total (counts 0,1,2 CONTINUED + count 3 COMPLETED), each with bounded
+	// history (a CONTINUED run is just STARTED, WFTC, CONTINUED_AS_NEW = 3 events).
+	runs, _, _ := n.ListWorkflowRuns(0, false, 100, "")
+	if len(runs) != 4 {
+		t.Fatalf("chain produced %d runs, want 4", len(runs))
+	}
+	var continued int
+	for _, r := range runs {
+		if r.GetStatus() == rotav1.WorkflowStatus_WF_CONTINUED {
+			continued++
+			if r.GetCurHistorySeq() > 4 {
+				t.Fatalf("run %d history seq = %d, want bounded (<=4)", r.GetRunId(), r.GetCurHistorySeq())
+			}
+		}
+	}
+	if continued != 3 {
+		t.Fatalf("got %d CONTINUED runs, want 3", continued)
+	}
+	// The first run is the root (no parent); successors link to a parent.
+	firstRun, _ := n.GetRun(first)
+	if firstRun.GetParentRunId() != 0 {
+		t.Fatalf("root run has parent %d, want 0", firstRun.GetParentRunId())
+	}
+	completed, _ := n.GetRun(completedID)
+	if completed.GetParentRunId() == 0 {
+		t.Fatal("final run should link to a parent via continue-as-new")
 	}
 }

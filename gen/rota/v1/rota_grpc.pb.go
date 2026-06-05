@@ -1519,3 +1519,461 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rota/v1/rota.proto",
 }
+
+const (
+	Workflow_StartWorkflow_FullMethodName       = "/rota.v1.Workflow/StartWorkflow"
+	Workflow_SignalWorkflow_FullMethodName      = "/rota.v1.Workflow/SignalWorkflow"
+	Workflow_CancelWorkflow_FullMethodName      = "/rota.v1.Workflow/CancelWorkflow"
+	Workflow_GetWorkflowRun_FullMethodName      = "/rota.v1.Workflow/GetWorkflowRun"
+	Workflow_GetWorkflowHistory_FullMethodName  = "/rota.v1.Workflow/GetWorkflowHistory"
+	Workflow_ListWorkflowRuns_FullMethodName    = "/rota.v1.Workflow/ListWorkflowRuns"
+	Workflow_PollWorkflowTask_FullMethodName    = "/rota.v1.Workflow/PollWorkflowTask"
+	Workflow_RespondWorkflowTask_FullMethodName = "/rota.v1.Workflow/RespondWorkflowTask"
+	Workflow_PollActivityTask_FullMethodName    = "/rota.v1.Workflow/PollActivityTask"
+	Workflow_RespondActivityTask_FullMethodName = "/rota.v1.Workflow/RespondActivityTask"
+)
+
+// WorkflowClient is the client API for Workflow service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+// the read RPCs are follower-servable.
+// ─────────────────────────────────────────────────────────────────────────────
+type WorkflowClient interface {
+	StartWorkflow(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
+	SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error)
+	CancelWorkflow(ctx context.Context, in *CancelWorkflowRequest, opts ...grpc.CallOption) (*CancelWorkflowResponse, error)
+	GetWorkflowRun(ctx context.Context, in *WorkflowRunRef, opts ...grpc.CallOption) (*WorkflowRun, error)
+	GetWorkflowHistory(ctx context.Context, in *WorkflowRunRef, opts ...grpc.CallOption) (*GetWorkflowHistoryResponse, error)
+	ListWorkflowRuns(ctx context.Context, in *ListWorkflowRunsRequest, opts ...grpc.CallOption) (*ListWorkflowRunsResponse, error)
+	// Worker protocol (language-agnostic; an SDK in any language drives the engine).
+	// Poll leases a task; Respond submits the result and acks the lease. Leader-guarded.
+	PollWorkflowTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PolledWorkflowTask, error)
+	RespondWorkflowTask(ctx context.Context, in *RespondWorkflowTaskRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskResponse, error)
+	PollActivityTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PolledActivityTask, error)
+	RespondActivityTask(ctx context.Context, in *RespondActivityTaskRequest, opts ...grpc.CallOption) (*RespondActivityTaskResponse, error)
+}
+
+type workflowClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWorkflowClient(cc grpc.ClientConnInterface) WorkflowClient {
+	return &workflowClient{cc}
+}
+
+func (c *workflowClient) StartWorkflow(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartWorkflowResponse)
+	err := c.cc.Invoke(ctx, Workflow_StartWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalWorkflowResponse)
+	err := c.cc.Invoke(ctx, Workflow_SignalWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) CancelWorkflow(ctx context.Context, in *CancelWorkflowRequest, opts ...grpc.CallOption) (*CancelWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelWorkflowResponse)
+	err := c.cc.Invoke(ctx, Workflow_CancelWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) GetWorkflowRun(ctx context.Context, in *WorkflowRunRef, opts ...grpc.CallOption) (*WorkflowRun, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkflowRun)
+	err := c.cc.Invoke(ctx, Workflow_GetWorkflowRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) GetWorkflowHistory(ctx context.Context, in *WorkflowRunRef, opts ...grpc.CallOption) (*GetWorkflowHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetWorkflowHistoryResponse)
+	err := c.cc.Invoke(ctx, Workflow_GetWorkflowHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) ListWorkflowRuns(ctx context.Context, in *ListWorkflowRunsRequest, opts ...grpc.CallOption) (*ListWorkflowRunsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWorkflowRunsResponse)
+	err := c.cc.Invoke(ctx, Workflow_ListWorkflowRuns_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) PollWorkflowTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PolledWorkflowTask, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PolledWorkflowTask)
+	err := c.cc.Invoke(ctx, Workflow_PollWorkflowTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) RespondWorkflowTask(ctx context.Context, in *RespondWorkflowTaskRequest, opts ...grpc.CallOption) (*RespondWorkflowTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RespondWorkflowTaskResponse)
+	err := c.cc.Invoke(ctx, Workflow_RespondWorkflowTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) PollActivityTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PolledActivityTask, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PolledActivityTask)
+	err := c.cc.Invoke(ctx, Workflow_PollActivityTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowClient) RespondActivityTask(ctx context.Context, in *RespondActivityTaskRequest, opts ...grpc.CallOption) (*RespondActivityTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RespondActivityTaskResponse)
+	err := c.cc.Invoke(ctx, Workflow_RespondActivityTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WorkflowServer is the server API for Workflow service.
+// All implementations must embed UnimplementedWorkflowServer
+// for forward compatibility.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+// the read RPCs are follower-servable.
+// ─────────────────────────────────────────────────────────────────────────────
+type WorkflowServer interface {
+	StartWorkflow(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
+	SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error)
+	CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error)
+	GetWorkflowRun(context.Context, *WorkflowRunRef) (*WorkflowRun, error)
+	GetWorkflowHistory(context.Context, *WorkflowRunRef) (*GetWorkflowHistoryResponse, error)
+	ListWorkflowRuns(context.Context, *ListWorkflowRunsRequest) (*ListWorkflowRunsResponse, error)
+	// Worker protocol (language-agnostic; an SDK in any language drives the engine).
+	// Poll leases a task; Respond submits the result and acks the lease. Leader-guarded.
+	PollWorkflowTask(context.Context, *PollTaskRequest) (*PolledWorkflowTask, error)
+	RespondWorkflowTask(context.Context, *RespondWorkflowTaskRequest) (*RespondWorkflowTaskResponse, error)
+	PollActivityTask(context.Context, *PollTaskRequest) (*PolledActivityTask, error)
+	RespondActivityTask(context.Context, *RespondActivityTaskRequest) (*RespondActivityTaskResponse, error)
+	mustEmbedUnimplementedWorkflowServer()
+}
+
+// UnimplementedWorkflowServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedWorkflowServer struct{}
+
+func (UnimplementedWorkflowServer) StartWorkflow(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartWorkflow not implemented")
+}
+func (UnimplementedWorkflowServer) SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SignalWorkflow not implemented")
+}
+func (UnimplementedWorkflowServer) CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelWorkflow not implemented")
+}
+func (UnimplementedWorkflowServer) GetWorkflowRun(context.Context, *WorkflowRunRef) (*WorkflowRun, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWorkflowRun not implemented")
+}
+func (UnimplementedWorkflowServer) GetWorkflowHistory(context.Context, *WorkflowRunRef) (*GetWorkflowHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWorkflowHistory not implemented")
+}
+func (UnimplementedWorkflowServer) ListWorkflowRuns(context.Context, *ListWorkflowRunsRequest) (*ListWorkflowRunsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWorkflowRuns not implemented")
+}
+func (UnimplementedWorkflowServer) PollWorkflowTask(context.Context, *PollTaskRequest) (*PolledWorkflowTask, error) {
+	return nil, status.Error(codes.Unimplemented, "method PollWorkflowTask not implemented")
+}
+func (UnimplementedWorkflowServer) RespondWorkflowTask(context.Context, *RespondWorkflowTaskRequest) (*RespondWorkflowTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RespondWorkflowTask not implemented")
+}
+func (UnimplementedWorkflowServer) PollActivityTask(context.Context, *PollTaskRequest) (*PolledActivityTask, error) {
+	return nil, status.Error(codes.Unimplemented, "method PollActivityTask not implemented")
+}
+func (UnimplementedWorkflowServer) RespondActivityTask(context.Context, *RespondActivityTaskRequest) (*RespondActivityTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RespondActivityTask not implemented")
+}
+func (UnimplementedWorkflowServer) mustEmbedUnimplementedWorkflowServer() {}
+func (UnimplementedWorkflowServer) testEmbeddedByValue()                  {}
+
+// UnsafeWorkflowServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WorkflowServer will
+// result in compilation errors.
+type UnsafeWorkflowServer interface {
+	mustEmbedUnimplementedWorkflowServer()
+}
+
+func RegisterWorkflowServer(s grpc.ServiceRegistrar, srv WorkflowServer) {
+	// If the following call panics, it indicates UnimplementedWorkflowServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&Workflow_ServiceDesc, srv)
+}
+
+func _Workflow_StartWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).StartWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_StartWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).StartWorkflow(ctx, req.(*StartWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_SignalWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).SignalWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_SignalWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).SignalWorkflow(ctx, req.(*SignalWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_CancelWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).CancelWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_CancelWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).CancelWorkflow(ctx, req.(*CancelWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_GetWorkflowRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowRunRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).GetWorkflowRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_GetWorkflowRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).GetWorkflowRun(ctx, req.(*WorkflowRunRef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_GetWorkflowHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowRunRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).GetWorkflowHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_GetWorkflowHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).GetWorkflowHistory(ctx, req.(*WorkflowRunRef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_ListWorkflowRuns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkflowRunsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).ListWorkflowRuns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_ListWorkflowRuns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).ListWorkflowRuns(ctx, req.(*ListWorkflowRunsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_PollWorkflowTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).PollWorkflowTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_PollWorkflowTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).PollWorkflowTask(ctx, req.(*PollTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_RespondWorkflowTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondWorkflowTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).RespondWorkflowTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_RespondWorkflowTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).RespondWorkflowTask(ctx, req.(*RespondWorkflowTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_PollActivityTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).PollActivityTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_PollActivityTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).PollActivityTask(ctx, req.(*PollTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workflow_RespondActivityTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondActivityTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowServer).RespondActivityTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workflow_RespondActivityTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowServer).RespondActivityTask(ctx, req.(*RespondActivityTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Workflow_ServiceDesc is the grpc.ServiceDesc for Workflow service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Workflow_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "rota.v1.Workflow",
+	HandlerType: (*WorkflowServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "StartWorkflow",
+			Handler:    _Workflow_StartWorkflow_Handler,
+		},
+		{
+			MethodName: "SignalWorkflow",
+			Handler:    _Workflow_SignalWorkflow_Handler,
+		},
+		{
+			MethodName: "CancelWorkflow",
+			Handler:    _Workflow_CancelWorkflow_Handler,
+		},
+		{
+			MethodName: "GetWorkflowRun",
+			Handler:    _Workflow_GetWorkflowRun_Handler,
+		},
+		{
+			MethodName: "GetWorkflowHistory",
+			Handler:    _Workflow_GetWorkflowHistory_Handler,
+		},
+		{
+			MethodName: "ListWorkflowRuns",
+			Handler:    _Workflow_ListWorkflowRuns_Handler,
+		},
+		{
+			MethodName: "PollWorkflowTask",
+			Handler:    _Workflow_PollWorkflowTask_Handler,
+		},
+		{
+			MethodName: "RespondWorkflowTask",
+			Handler:    _Workflow_RespondWorkflowTask_Handler,
+		},
+		{
+			MethodName: "PollActivityTask",
+			Handler:    _Workflow_PollActivityTask_Handler,
+		},
+		{
+			MethodName: "RespondActivityTask",
+			Handler:    _Workflow_RespondActivityTask_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rota/v1/rota.proto",
+}

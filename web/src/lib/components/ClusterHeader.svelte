@@ -1,18 +1,31 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { api, num } from '$lib/api';
   import { createPoll } from '$lib/poll.svelte';
-  import { fmtInt, shortHash } from '$lib/format';
+  import { fmtInt, fmtRate } from '$lib/format';
 
-  // Persistent Raft/cluster header — polls /api/cluster + /api/health every ~2s.
+  // Persistent "instrument readout" header. The ROTA wordmark in Instrument
+  // Serif sits beside a live cluster console — leader / term / applied-index /
+  // quorum (from /api/cluster + /api/health) and aggregate throughput (summed
+  // publish rate across lanes from /api/stats). All three poll on ~2s.
+  const nav = [
+    { href: '/', label: 'lanes', seg: '' },
+    { href: '/workflows', label: 'workflows', seg: 'workflows' }
+  ];
+  const activeSeg = $derived((page.url.pathname.split('/')[1] ?? '').toLowerCase());
+
   const cluster = createPoll(() => api.cluster(), 2000);
   const health = createPoll(() => api.health(), 2000);
+  const stats = createPoll(() => api.stats(), 2000);
 
   $effect(() => {
     cluster.start();
     health.start();
+    stats.start();
     return () => {
       cluster.stop();
       health.stop();
+      stats.stop();
     };
   });
 
@@ -20,235 +33,211 @@
   const h = $derived(health.data);
   const peers = $derived(c?.peers ?? []);
   const voters = $derived(peers.filter((p) => (p.suffrage ?? '').toLowerCase() === 'voter').length);
-
   const connOk = $derived(!cluster.error && !health.error);
+
+  // Aggregate throughput = sum of per-lane publish rates.
+  const tput = $derived(
+    (stats.data?.lanes ?? []).reduce((a, l) => a + (l.publishRate ?? 0), 0)
+  );
+
+  // Overall serving verdict drives the leader dot color.
+  const serving = $derived(!!(h?.serving && h?.hasQuorum));
 </script>
 
-<header class="hdr">
+<header class="top">
   <div class="brand">
-    <a href="/" class="logo" aria-label="Rota home">
-      <span class="mark"></span>
-      <span class="wordmark">ROTA</span>
-    </a>
-    <span class="tag">operator console</span>
+    <a href="/" class="mark" aria-label="Rota home">ROTA<em>.</em></a>
+    <nav class="nav">
+      {#each nav as item (item.href)}
+        <a class="navlink" class:active={activeSeg === item.seg} href={item.href}>{item.label}</a>
+      {/each}
+    </nav>
   </div>
 
-  <div class="cluster">
-    <!-- Serving / quorum status -->
-    <div class="stat">
-      <span class="lbl">cluster</span>
-      {#if !connOk}
-        <span class="pill dlq"><span class="dot"></span>unreachable</span>
-      {:else if h?.serving && h?.hasQuorum}
-        <span class="pill ready"><span class="dot"></span>serving</span>
-      {:else if h?.hasQuorum}
-        <span class="pill delayed"><span class="dot"></span>quorum, not serving</span>
-      {:else}
-        <span class="pill dlq"><span class="dot"></span>no quorum</span>
-      {/if}
-    </div>
-
-    <div class="sep"></div>
-
-    <!-- Leader -->
-    <div class="stat">
-      <span class="lbl">leader</span>
-      <span class="val mono" title={c?.leaderAddr}>
-        {#if c?.leaderId}
-          <span class="led">{c.leaderId}</span>{#if h?.isLeader}<span class="self">self</span>{/if}
+  <div class="readout">
+    <div class="kv">
+      <span class="k">Leader</span>
+      <span class="v">
+        {#if !connOk}
+          <span class="dot down"></span><span class="c-dlq">unreachable</span>
+        {:else if c?.leaderId}
+          <span class="dot" class:ok={serving} class:warn={!serving}></span>{c.leaderId}{#if h?.isLeader}<span
+              class="self">self</span
+            >{/if}
         {:else}
-          <span class="c-delayed">electing…</span>
+          <span class="dot warn"></span><span class="c-delayed">electing…</span>
         {/if}
       </span>
     </div>
 
-    <div class="sep"></div>
-
-    <div class="stat">
-      <span class="lbl">term</span>
-      <span class="val num">{fmtInt(num(c?.term))}</span>
+    <div class="kv">
+      <span class="k">Term</span>
+      <span class="v num">{fmtInt(num(c?.term))}</span>
     </div>
 
-    <div class="stat">
-      <span class="lbl">applied</span>
-      <span class="val num">{fmtInt(num(c?.appliedIndex))}</span>
+    <div class="kv">
+      <span class="k">Applied</span>
+      <span class="v num">{fmtInt(num(c?.appliedIndex))}</span>
     </div>
 
-    <div class="sep"></div>
+    <div class="kv">
+      <span class="k">Quorum</span>
+      <span
+        class="v num"
+        class:ok={connOk && (h?.hasQuorum ?? false)}
+        class:bad={connOk && !(h?.hasQuorum ?? true)}
+        title={peers.map((p) => `${p.id} · ${p.suffrage ?? '?'}`).join('\n')}
+      >
+        {voters} / {peers.length || '?'}
+      </span>
+    </div>
 
-    <!-- Per-peer suffrage strip -->
-    <div class="peers" title={`${voters} voter${voters === 1 ? '' : 's'} of ${peers.length} peer${peers.length === 1 ? '' : 's'}`}>
-      <span class="lbl">peers</span>
-      <div class="peerdots">
-        {#each peers as p (p.id)}
-          {@const isVoter = (p.suffrage ?? '').toLowerCase() === 'voter'}
-          {@const isLeader = p.id === c?.leaderId}
-          <span
-            class="peer"
-            class:voter={isVoter}
-            class:leader={isLeader}
-            title={`${p.id} · ${p.addr ?? ''} · ${p.suffrage ?? 'Unknown'}${isLeader ? ' · LEADER' : ''}`}
-          >
-            <span class="pdot"></span>
-            <span class="pid">{shortHash(p.id, 10)}</span>
-          </span>
-        {/each}
-        {#if peers.length === 0}
-          <span class="faint mono">{connOk ? 'no peers' : '—'}</span>
-        {/if}
-      </div>
-      <span class="quorum num">{voters}/{peers.length || '?'}</span>
+    <div class="kv">
+      <span class="k">Throughput</span>
+      <span class="v num">{stats.data ? fmtRate(tput) : '—'}</span>
     </div>
   </div>
 </header>
 
 <style>
-  .hdr {
+  .top {
     position: sticky;
     top: 0;
     z-index: 50;
     display: flex;
-    align-items: center;
-    gap: 22px;
-    padding: 0 22px;
-    height: 52px;
-    background: rgba(13, 17, 23, 0.86);
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 18px 26px 14px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(7, 8, 12, 0.78);
     backdrop-filter: blur(14px) saturate(140%);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+    animation: rise 0.7s both;
   }
 
   .brand {
     display: flex;
     align-items: baseline;
-    gap: 10px;
-  }
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 9px;
+    gap: 18px;
   }
   .mark {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 2.5px solid var(--ready);
-    position: relative;
-    box-shadow: 0 0 10px rgba(63, 185, 80, 0.4);
+    font-family: var(--serif);
+    font-size: 38px;
+    line-height: 0.8;
+    letter-spacing: 0.5px;
+    color: var(--ink);
   }
-  .mark::before {
-    content: '';
-    position: absolute;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--inflight);
-    top: -3px;
-    right: -3px;
-    box-shadow: 0 0 6px var(--inflight);
-  }
-  .wordmark {
-    font-family: var(--mono);
-    font-weight: 700;
-    letter-spacing: 0.22em;
-    font-size: 14px;
-  }
-  .tag {
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--fg-ghost);
+  .mark em {
+    font-style: italic;
+    color: var(--served);
   }
 
-  .cluster {
+  .nav {
     display: flex;
     align-items: center;
-    gap: 18px;
-    margin-left: auto;
-    overflow-x: auto;
-    padding: 6px 0;
+    gap: 4px;
+    padding-bottom: 4px;
   }
-  .sep {
-    width: 1px;
-    height: 22px;
-    background: var(--border);
+  .navlink {
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--faint);
+    transition:
+      color 0.1s ease,
+      background 0.1s ease,
+      border-color 0.1s ease;
+    border: 1px solid transparent;
   }
-  .stat {
+  .navlink:hover {
+    color: var(--dim);
+  }
+  .navlink.active {
+    color: var(--ink);
+    border-color: var(--line2);
+    background: var(--panel2);
+  }
+
+  .readout {
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .kv {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    white-space: nowrap;
+    gap: 3px;
+    align-items: flex-end;
   }
-  .lbl {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--fg-ghost);
-  }
-  .val {
-    font-size: 12.5px;
-    color: var(--fg);
-  }
-  .led {
-    color: var(--ready);
-    font-weight: 600;
-  }
-  .self {
-    margin-left: 6px;
-    font-size: 9px;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--ready-bg);
-    color: var(--ready);
-    border: 1px solid var(--ready-bd);
-    letter-spacing: 0.05em;
+  .kv .k {
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    color: var(--faint);
     text-transform: uppercase;
   }
-
-  .peers {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-  }
-  .peerdots {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .peer {
+  .kv .v {
+    font-size: 15px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 2px 7px 2px 6px;
-    border-radius: 999px;
-    background: var(--bg-3);
-    border: 1px solid var(--border-strong);
+    gap: 6px;
+    white-space: nowrap;
   }
-  .pdot {
+  .kv .v.ok {
+    color: var(--served);
+  }
+  .kv .v.bad {
+    color: var(--fail);
+  }
+
+  .dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--paused);
+    display: inline-block;
+    background: var(--pause);
   }
-  .peer.voter .pdot {
-    background: var(--ready);
-    box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+  .dot.ok {
+    background: var(--served);
+    box-shadow: var(--glow) var(--served);
+    animation: beat 1.8s infinite;
   }
-  .peer.leader {
-    border-color: var(--ready-bd);
+  .dot.warn {
+    background: var(--active);
+    box-shadow: var(--glow) var(--active);
+    animation: beat 1.8s infinite;
+  }
+  .dot.down {
+    background: var(--fail);
+    box-shadow: var(--glow) var(--fail);
+  }
+
+  .self {
+    margin-left: 2px;
+    font-size: 8.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
     background: var(--ready-bg);
+    color: var(--served);
+    border: 1px solid var(--ready-bd);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
-  .peer.leader .pdot {
-    background: var(--ready);
-    box-shadow: 0 0 9px var(--ready);
-  }
-  .pid {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--fg-dim);
-  }
-  .quorum {
-    font-size: 12px;
-    color: var(--fg-dim);
+
+  @media (max-width: 820px) {
+    .top {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 14px;
+    }
+    .readout {
+      justify-content: flex-start;
+    }
   }
 </style>

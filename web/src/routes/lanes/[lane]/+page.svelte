@@ -123,8 +123,12 @@
   }
 
   .lane-summary {
-    padding: 16px 20px;
+    padding: 18px 22px;
     margin-bottom: 18px;
+  }
+  .ls.title h1 {
+    font-family: var(--serif);
+    font-weight: 400;
   }
   .ls.title {
     display: flex;
@@ -202,8 +206,11 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--fg-faint);
-    font-weight: 500;
-    font-size: 13px;
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     margin-bottom: -1px;
     transition: color 0.1s ease;
   }

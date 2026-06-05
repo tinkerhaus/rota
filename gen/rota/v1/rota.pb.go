@@ -6053,7 +6053,8 @@ type WorkflowRun struct {
 	Input         []byte                 `protobuf:"bytes,7,opt,name=input,proto3" json:"input,omitempty"`
 	StartedMs     uint64                 `protobuf:"varint,8,opt,name=started_ms,json=startedMs,proto3" json:"started_ms,omitempty"`
 	LastEventMs   uint64                 `protobuf:"varint,9,opt,name=last_event_ms,json=lastEventMs,proto3" json:"last_event_ms,omitempty"`
-	ParentRunId   uint64                 `protobuf:"varint,10,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"` // 0 for a root run
+	ParentRunId   uint64                 `protobuf:"varint,10,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`       // 0 for a root run
+	WfTaskPending bool                   `protobuf:"varint,11,opt,name=wf_task_pending,json=wfTaskPending,proto3" json:"wf_task_pending,omitempty"` // a workflow task is dispatched & not yet completed (dedup)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6158,6 +6159,68 @@ func (x *WorkflowRun) GetParentRunId() uint64 {
 	return 0
 }
 
+func (x *WorkflowRun) GetWfTaskPending() bool {
+	if x != nil {
+		return x.WfTaskPending
+	}
+	return false
+}
+
+// WorkflowTaskRef is the payload of a dispatched workflow-task message on
+// __wf/<type> (group = run_id). A worker leases it, fetches the run's history,
+// replays, decides, and completes the workflow task.
+type WorkflowTaskRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	WorkflowType  string                 `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowTaskRef) Reset() {
+	*x = WorkflowTaskRef{}
+	mi := &file_rota_v1_rota_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowTaskRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowTaskRef) ProtoMessage() {}
+
+func (x *WorkflowTaskRef) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowTaskRef.ProtoReflect.Descriptor instead.
+func (*WorkflowTaskRef) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{79}
+}
+
+func (x *WorkflowTaskRef) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *WorkflowTaskRef) GetWorkflowType() string {
+	if x != nil {
+		return x.WorkflowType
+	}
+	return ""
+}
+
 // Activity dispatch (Phase 8). An ACTIVITY_SCHEDULED history event carries these
 // attrs; on apply the engine publishes an ActivityTask message onto __act/<type>
 // (group = tenant) so a NORMAL worker leases it — activities ARE leases. The task
@@ -6174,7 +6237,7 @@ type ActivityScheduledAttrs struct {
 
 func (x *ActivityScheduledAttrs) Reset() {
 	*x = ActivityScheduledAttrs{}
-	mi := &file_rota_v1_rota_proto_msgTypes[79]
+	mi := &file_rota_v1_rota_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6186,7 +6249,7 @@ func (x *ActivityScheduledAttrs) String() string {
 func (*ActivityScheduledAttrs) ProtoMessage() {}
 
 func (x *ActivityScheduledAttrs) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[79]
+	mi := &file_rota_v1_rota_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6199,7 +6262,7 @@ func (x *ActivityScheduledAttrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityScheduledAttrs.ProtoReflect.Descriptor instead.
 func (*ActivityScheduledAttrs) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{79}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ActivityScheduledAttrs) GetActivityType() string {
@@ -6234,7 +6297,7 @@ type ActivityCompletedAttrs struct {
 
 func (x *ActivityCompletedAttrs) Reset() {
 	*x = ActivityCompletedAttrs{}
-	mi := &file_rota_v1_rota_proto_msgTypes[80]
+	mi := &file_rota_v1_rota_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6246,7 +6309,7 @@ func (x *ActivityCompletedAttrs) String() string {
 func (*ActivityCompletedAttrs) ProtoMessage() {}
 
 func (x *ActivityCompletedAttrs) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[80]
+	mi := &file_rota_v1_rota_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6259,7 +6322,7 @@ func (x *ActivityCompletedAttrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityCompletedAttrs.ProtoReflect.Descriptor instead.
 func (*ActivityCompletedAttrs) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{80}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ActivityCompletedAttrs) GetScheduledEventId() uint64 {
@@ -6295,7 +6358,7 @@ type ActivityTask struct {
 
 func (x *ActivityTask) Reset() {
 	*x = ActivityTask{}
-	mi := &file_rota_v1_rota_proto_msgTypes[81]
+	mi := &file_rota_v1_rota_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6307,7 +6370,7 @@ func (x *ActivityTask) String() string {
 func (*ActivityTask) ProtoMessage() {}
 
 func (x *ActivityTask) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[81]
+	mi := &file_rota_v1_rota_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6320,7 +6383,7 @@ func (x *ActivityTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityTask.ProtoReflect.Descriptor instead.
 func (*ActivityTask) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{81}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ActivityTask) GetRunId() uint64 {
@@ -6364,7 +6427,7 @@ type TimerStartedAttrs struct {
 
 func (x *TimerStartedAttrs) Reset() {
 	*x = TimerStartedAttrs{}
-	mi := &file_rota_v1_rota_proto_msgTypes[82]
+	mi := &file_rota_v1_rota_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6376,7 +6439,7 @@ func (x *TimerStartedAttrs) String() string {
 func (*TimerStartedAttrs) ProtoMessage() {}
 
 func (x *TimerStartedAttrs) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[82]
+	mi := &file_rota_v1_rota_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6389,7 +6452,7 @@ func (x *TimerStartedAttrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerStartedAttrs.ProtoReflect.Descriptor instead.
 func (*TimerStartedAttrs) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{82}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *TimerStartedAttrs) GetFireAtMs() uint64 {
@@ -6408,7 +6471,7 @@ type TimerFiredAttrs struct {
 
 func (x *TimerFiredAttrs) Reset() {
 	*x = TimerFiredAttrs{}
-	mi := &file_rota_v1_rota_proto_msgTypes[83]
+	mi := &file_rota_v1_rota_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6420,7 +6483,7 @@ func (x *TimerFiredAttrs) String() string {
 func (*TimerFiredAttrs) ProtoMessage() {}
 
 func (x *TimerFiredAttrs) ProtoReflect() protoreflect.Message {
-	mi := &file_rota_v1_rota_proto_msgTypes[83]
+	mi := &file_rota_v1_rota_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6433,7 +6496,7 @@ func (x *TimerFiredAttrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerFiredAttrs.ProtoReflect.Descriptor instead.
 func (*TimerFiredAttrs) Descriptor() ([]byte, []int) {
-	return file_rota_v1_rota_proto_rawDescGZIP(), []int{83}
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *TimerFiredAttrs) GetStartedEventId() uint64 {
@@ -6441,6 +6504,1157 @@ func (x *TimerFiredAttrs) GetStartedEventId() uint64 {
 		return x.StartedEventId
 	}
 	return 0
+}
+
+// Signal delivery: SIGNAL_RECEIVED is appended to a running run (an external event)
+// and dispatches a workflow task so the workflow code can react to it on replay.
+type SignalReceivedAttrs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SignalName    string                 `protobuf:"bytes,1,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalReceivedAttrs) Reset() {
+	*x = SignalReceivedAttrs{}
+	mi := &file_rota_v1_rota_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalReceivedAttrs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalReceivedAttrs) ProtoMessage() {}
+
+func (x *SignalReceivedAttrs) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalReceivedAttrs.ProtoReflect.Descriptor instead.
+func (*SignalReceivedAttrs) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *SignalReceivedAttrs) GetSignalName() string {
+	if x != nil {
+		return x.SignalName
+	}
+	return ""
+}
+
+func (x *SignalReceivedAttrs) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type PollTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskType      string                 `protobuf:"bytes,1,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"` // workflow type or activity type
+	ConsumerId    string                 `protobuf:"bytes,2,opt,name=consumer_id,json=consumerId,proto3" json:"consumer_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollTaskRequest) Reset() {
+	*x = PollTaskRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollTaskRequest) ProtoMessage() {}
+
+func (x *PollTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollTaskRequest.ProtoReflect.Descriptor instead.
+func (*PollTaskRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *PollTaskRequest) GetTaskType() string {
+	if x != nil {
+		return x.TaskType
+	}
+	return ""
+}
+
+func (x *PollTaskRequest) GetConsumerId() string {
+	if x != nil {
+		return x.ConsumerId
+	}
+	return ""
+}
+
+// PolledWorkflowTask carries the run's full history so the worker replays + decides.
+// empty=true means no task was available.
+type PolledWorkflowTask struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Empty         bool                   `protobuf:"varint,1,opt,name=empty,proto3" json:"empty,omitempty"`
+	RunId         uint64                 `protobuf:"varint,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	LeaseId       uint64                 `protobuf:"varint,3,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	RunEpoch      uint32                 `protobuf:"varint,4,opt,name=run_epoch,json=runEpoch,proto3" json:"run_epoch,omitempty"`
+	HistorySeq    uint64                 `protobuf:"varint,5,opt,name=history_seq,json=historySeq,proto3" json:"history_seq,omitempty"`
+	History       []*HistoryEvent        `protobuf:"bytes,6,rep,name=history,proto3" json:"history,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolledWorkflowTask) Reset() {
+	*x = PolledWorkflowTask{}
+	mi := &file_rota_v1_rota_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolledWorkflowTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolledWorkflowTask) ProtoMessage() {}
+
+func (x *PolledWorkflowTask) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolledWorkflowTask.ProtoReflect.Descriptor instead.
+func (*PolledWorkflowTask) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *PolledWorkflowTask) GetEmpty() bool {
+	if x != nil {
+		return x.Empty
+	}
+	return false
+}
+
+func (x *PolledWorkflowTask) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *PolledWorkflowTask) GetLeaseId() uint64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
+func (x *PolledWorkflowTask) GetRunEpoch() uint32 {
+	if x != nil {
+		return x.RunEpoch
+	}
+	return 0
+}
+
+func (x *PolledWorkflowTask) GetHistorySeq() uint64 {
+	if x != nil {
+		return x.HistorySeq
+	}
+	return 0
+}
+
+func (x *PolledWorkflowTask) GetHistory() []*HistoryEvent {
+	if x != nil {
+		return x.History
+	}
+	return nil
+}
+
+type WorkflowCommandProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // schedule_activity | start_timer | continue_as_new | complete_workflow | fail_workflow
+	ActivityType  string                 `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Result        []byte                 `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
+	DelayMs       uint64                 `protobuf:"varint,5,opt,name=delay_ms,json=delayMs,proto3" json:"delay_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowCommandProto) Reset() {
+	*x = WorkflowCommandProto{}
+	mi := &file_rota_v1_rota_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowCommandProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowCommandProto) ProtoMessage() {}
+
+func (x *WorkflowCommandProto) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowCommandProto.ProtoReflect.Descriptor instead.
+func (*WorkflowCommandProto) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *WorkflowCommandProto) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *WorkflowCommandProto) GetActivityType() string {
+	if x != nil {
+		return x.ActivityType
+	}
+	return ""
+}
+
+func (x *WorkflowCommandProto) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+func (x *WorkflowCommandProto) GetResult() []byte {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *WorkflowCommandProto) GetDelayMs() uint64 {
+	if x != nil {
+		return x.DelayMs
+	}
+	return 0
+}
+
+type RespondWorkflowTaskRequest struct {
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	RunId          uint64                  `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	LeaseId        uint64                  `protobuf:"varint,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	RunEpoch       uint32                  `protobuf:"varint,3,opt,name=run_epoch,json=runEpoch,proto3" json:"run_epoch,omitempty"`
+	HistorySeq     uint64                  `protobuf:"varint,4,opt,name=history_seq,json=historySeq,proto3" json:"history_seq,omitempty"`
+	PrefixChecksum []byte                  `protobuf:"bytes,5,opt,name=prefix_checksum,json=prefixChecksum,proto3" json:"prefix_checksum,omitempty"`
+	Commands       []*WorkflowCommandProto `protobuf:"bytes,6,rep,name=commands,proto3" json:"commands,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RespondWorkflowTaskRequest) Reset() {
+	*x = RespondWorkflowTaskRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondWorkflowTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondWorkflowTaskRequest) ProtoMessage() {}
+
+func (x *RespondWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondWorkflowTaskRequest.ProtoReflect.Descriptor instead.
+func (*RespondWorkflowTaskRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *RespondWorkflowTaskRequest) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *RespondWorkflowTaskRequest) GetLeaseId() uint64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
+func (x *RespondWorkflowTaskRequest) GetRunEpoch() uint32 {
+	if x != nil {
+		return x.RunEpoch
+	}
+	return 0
+}
+
+func (x *RespondWorkflowTaskRequest) GetHistorySeq() uint64 {
+	if x != nil {
+		return x.HistorySeq
+	}
+	return 0
+}
+
+func (x *RespondWorkflowTaskRequest) GetPrefixChecksum() []byte {
+	if x != nil {
+		return x.PrefixChecksum
+	}
+	return nil
+}
+
+func (x *RespondWorkflowTaskRequest) GetCommands() []*WorkflowCommandProto {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+type RespondWorkflowTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Applied       bool                   `protobuf:"varint,1,opt,name=applied,proto3" json:"applied,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"` // "" | stale | non_determinism | closed | checksum_required
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondWorkflowTaskResponse) Reset() {
+	*x = RespondWorkflowTaskResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondWorkflowTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondWorkflowTaskResponse) ProtoMessage() {}
+
+func (x *RespondWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondWorkflowTaskResponse.ProtoReflect.Descriptor instead.
+func (*RespondWorkflowTaskResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *RespondWorkflowTaskResponse) GetApplied() bool {
+	if x != nil {
+		return x.Applied
+	}
+	return false
+}
+
+func (x *RespondWorkflowTaskResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type PolledActivityTask struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Empty            bool                   `protobuf:"varint,1,opt,name=empty,proto3" json:"empty,omitempty"`
+	RunId            uint64                 `protobuf:"varint,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	LeaseId          uint64                 `protobuf:"varint,3,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	ScheduledEventId uint64                 `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
+	ActivityType     string                 `protobuf:"bytes,5,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
+	Input            []byte                 `protobuf:"bytes,6,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PolledActivityTask) Reset() {
+	*x = PolledActivityTask{}
+	mi := &file_rota_v1_rota_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolledActivityTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolledActivityTask) ProtoMessage() {}
+
+func (x *PolledActivityTask) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolledActivityTask.ProtoReflect.Descriptor instead.
+func (*PolledActivityTask) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *PolledActivityTask) GetEmpty() bool {
+	if x != nil {
+		return x.Empty
+	}
+	return false
+}
+
+func (x *PolledActivityTask) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *PolledActivityTask) GetLeaseId() uint64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
+func (x *PolledActivityTask) GetScheduledEventId() uint64 {
+	if x != nil {
+		return x.ScheduledEventId
+	}
+	return 0
+}
+
+func (x *PolledActivityTask) GetActivityType() string {
+	if x != nil {
+		return x.ActivityType
+	}
+	return ""
+}
+
+func (x *PolledActivityTask) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type RespondActivityTaskRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RunId            uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	LeaseId          uint64                 `protobuf:"varint,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	ScheduledEventId uint64                 `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
+	Success          bool                   `protobuf:"varint,4,opt,name=success,proto3" json:"success,omitempty"`
+	Result           []byte                 `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RespondActivityTaskRequest) Reset() {
+	*x = RespondActivityTaskRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondActivityTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondActivityTaskRequest) ProtoMessage() {}
+
+func (x *RespondActivityTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondActivityTaskRequest.ProtoReflect.Descriptor instead.
+func (*RespondActivityTaskRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *RespondActivityTaskRequest) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *RespondActivityTaskRequest) GetLeaseId() uint64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
+func (x *RespondActivityTaskRequest) GetScheduledEventId() uint64 {
+	if x != nil {
+		return x.ScheduledEventId
+	}
+	return 0
+}
+
+func (x *RespondActivityTaskRequest) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RespondActivityTaskRequest) GetResult() []byte {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+type RespondActivityTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondActivityTaskResponse) Reset() {
+	*x = RespondActivityTaskResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondActivityTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondActivityTaskResponse) ProtoMessage() {}
+
+func (x *RespondActivityTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondActivityTaskResponse.ProtoReflect.Descriptor instead.
+func (*RespondActivityTaskResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{93}
+}
+
+type StartWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowType  string                 `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartWorkflowRequest) Reset() {
+	*x = StartWorkflowRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartWorkflowRequest) ProtoMessage() {}
+
+func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*StartWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *StartWorkflowRequest) GetWorkflowType() string {
+	if x != nil {
+		return x.WorkflowType
+	}
+	return ""
+}
+
+func (x *StartWorkflowRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *StartWorkflowRequest) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type StartWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartWorkflowResponse) Reset() {
+	*x = StartWorkflowResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartWorkflowResponse) ProtoMessage() {}
+
+func (x *StartWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*StartWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *StartWorkflowResponse) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+type SignalWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	SignalName    string                 `protobuf:"bytes,2,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalWorkflowRequest) Reset() {
+	*x = SignalWorkflowRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalWorkflowRequest) ProtoMessage() {}
+
+func (x *SignalWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*SignalWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *SignalWorkflowRequest) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *SignalWorkflowRequest) GetSignalName() string {
+	if x != nil {
+		return x.SignalName
+	}
+	return ""
+}
+
+func (x *SignalWorkflowRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type SignalWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalWorkflowResponse) Reset() {
+	*x = SignalWorkflowResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalWorkflowResponse) ProtoMessage() {}
+
+func (x *SignalWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*SignalWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{97}
+}
+
+type CancelWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Reason        []byte                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelWorkflowRequest) Reset() {
+	*x = CancelWorkflowRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelWorkflowRequest) ProtoMessage() {}
+
+func (x *CancelWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*CancelWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *CancelWorkflowRequest) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+func (x *CancelWorkflowRequest) GetReason() []byte {
+	if x != nil {
+		return x.Reason
+	}
+	return nil
+}
+
+type CancelWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Canceled      bool                   `protobuf:"varint,1,opt,name=canceled,proto3" json:"canceled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelWorkflowResponse) Reset() {
+	*x = CancelWorkflowResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelWorkflowResponse) ProtoMessage() {}
+
+func (x *CancelWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*CancelWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *CancelWorkflowResponse) GetCanceled() bool {
+	if x != nil {
+		return x.Canceled
+	}
+	return false
+}
+
+type WorkflowRunRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         uint64                 `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowRunRef) Reset() {
+	*x = WorkflowRunRef{}
+	mi := &file_rota_v1_rota_proto_msgTypes[100]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowRunRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowRunRef) ProtoMessage() {}
+
+func (x *WorkflowRunRef) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[100]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowRunRef.ProtoReflect.Descriptor instead.
+func (*WorkflowRunRef) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{100}
+}
+
+func (x *WorkflowRunRef) GetRunId() uint64 {
+	if x != nil {
+		return x.RunId
+	}
+	return 0
+}
+
+type GetWorkflowHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Events        []*HistoryEvent        `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWorkflowHistoryResponse) Reset() {
+	*x = GetWorkflowHistoryResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[101]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkflowHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkflowHistoryResponse) ProtoMessage() {}
+
+func (x *GetWorkflowHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[101]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkflowHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetWorkflowHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{101}
+}
+
+func (x *GetWorkflowHistoryResponse) GetEvents() []*HistoryEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+type ListWorkflowRunsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        WorkflowStatus         `protobuf:"varint,1,opt,name=status,proto3,enum=rota.v1.WorkflowStatus" json:"status,omitempty"` // filter (only applied when has_status)
+	HasStatus     bool                   `protobuf:"varint,2,opt,name=has_status,json=hasStatus,proto3" json:"has_status,omitempty"`
+	PageSize      uint32                 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowRunsRequest) Reset() {
+	*x = ListWorkflowRunsRequest{}
+	mi := &file_rota_v1_rota_proto_msgTypes[102]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowRunsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowRunsRequest) ProtoMessage() {}
+
+func (x *ListWorkflowRunsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[102]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowRunsRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkflowRunsRequest) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{102}
+}
+
+func (x *ListWorkflowRunsRequest) GetStatus() WorkflowStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowStatus_WF_PENDING
+}
+
+func (x *ListWorkflowRunsRequest) GetHasStatus() bool {
+	if x != nil {
+		return x.HasStatus
+	}
+	return false
+}
+
+func (x *ListWorkflowRunsRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListWorkflowRunsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListWorkflowRunsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runs          []*WorkflowRun         `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowRunsResponse) Reset() {
+	*x = ListWorkflowRunsResponse{}
+	mi := &file_rota_v1_rota_proto_msgTypes[103]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowRunsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowRunsResponse) ProtoMessage() {}
+
+func (x *ListWorkflowRunsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[103]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowRunsResponse.ProtoReflect.Descriptor instead.
+func (*ListWorkflowRunsResponse) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{103}
+}
+
+func (x *ListWorkflowRunsResponse) GetRuns() []*WorkflowRun {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
+func (x *ListWorkflowRunsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// Continue-as-new closes a run (status CONTINUED) and atomically starts a successor
+// with this carried input and a FRESH, empty history — bounding per-run history for
+// long-running / looping workflows.
+type ContinueAsNewAttrs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Input         []byte                 `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContinueAsNewAttrs) Reset() {
+	*x = ContinueAsNewAttrs{}
+	mi := &file_rota_v1_rota_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContinueAsNewAttrs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContinueAsNewAttrs) ProtoMessage() {}
+
+func (x *ContinueAsNewAttrs) ProtoReflect() protoreflect.Message {
+	mi := &file_rota_v1_rota_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContinueAsNewAttrs.ProtoReflect.Descriptor instead.
+func (*ContinueAsNewAttrs) Descriptor() ([]byte, []int) {
+	return file_rota_v1_rota_proto_rawDescGZIP(), []int{104}
+}
+
+func (x *ContinueAsNewAttrs) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
 }
 
 var File_rota_v1_rota_proto protoreflect.FileDescriptor
@@ -6933,7 +8147,7 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\n" +
 	"event_type\x18\x02 \x01(\x0e2\x19.rota.v1.HistoryEventTypeR\teventType\x12\"\n" +
 	"\revent_time_ms\x18\x03 \x01(\x04R\veventTimeMs\x12\x14\n" +
-	"\x05attrs\x18\x04 \x01(\fR\x05attrs\"\xd9\x02\n" +
+	"\x05attrs\x18\x04 \x01(\fR\x05attrs\"\x81\x03\n" +
 	"\vWorkflowRun\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1b\n" +
@@ -6946,7 +8160,11 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"started_ms\x18\b \x01(\x04R\tstartedMs\x12\"\n" +
 	"\rlast_event_ms\x18\t \x01(\x04R\vlastEventMs\x12\"\n" +
 	"\rparent_run_id\x18\n" +
-	" \x01(\x04R\vparentRunId\"p\n" +
+	" \x01(\x04R\vparentRunId\x12&\n" +
+	"\x0fwf_task_pending\x18\v \x01(\bR\rwfTaskPending\"M\n" +
+	"\x0fWorkflowTaskRef\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12#\n" +
+	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\"p\n" +
 	"\x16ActivityScheduledAttrs\x12#\n" +
 	"\ractivity_type\x18\x01 \x01(\tR\factivityType\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x14\n" +
@@ -6964,7 +8182,87 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\n" +
 	"fire_at_ms\x18\x01 \x01(\x04R\bfireAtMs\";\n" +
 	"\x0fTimerFiredAttrs\x12(\n" +
-	"\x10started_event_id\x18\x01 \x01(\x04R\x0estartedEventId*e\n" +
+	"\x10started_event_id\x18\x01 \x01(\x04R\x0estartedEventId\"P\n" +
+	"\x13SignalReceivedAttrs\x12\x1f\n" +
+	"\vsignal_name\x18\x01 \x01(\tR\n" +
+	"signalName\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\"O\n" +
+	"\x0fPollTaskRequest\x12\x1b\n" +
+	"\ttask_type\x18\x01 \x01(\tR\btaskType\x12\x1f\n" +
+	"\vconsumer_id\x18\x02 \x01(\tR\n" +
+	"consumerId\"\xcb\x01\n" +
+	"\x12PolledWorkflowTask\x12\x14\n" +
+	"\x05empty\x18\x01 \x01(\bR\x05empty\x12\x15\n" +
+	"\x06run_id\x18\x02 \x01(\x04R\x05runId\x12\x19\n" +
+	"\blease_id\x18\x03 \x01(\x04R\aleaseId\x12\x1b\n" +
+	"\trun_epoch\x18\x04 \x01(\rR\brunEpoch\x12\x1f\n" +
+	"\vhistory_seq\x18\x05 \x01(\x04R\n" +
+	"historySeq\x12/\n" +
+	"\ahistory\x18\x06 \x03(\v2\x15.rota.v1.HistoryEventR\ahistory\"\x98\x01\n" +
+	"\x14WorkflowCommandProto\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12#\n" +
+	"\ractivity_type\x18\x02 \x01(\tR\factivityType\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\x12\x16\n" +
+	"\x06result\x18\x04 \x01(\fR\x06result\x12\x19\n" +
+	"\bdelay_ms\x18\x05 \x01(\x04R\adelayMs\"\xf0\x01\n" +
+	"\x1aRespondWorkflowTaskRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12\x19\n" +
+	"\blease_id\x18\x02 \x01(\x04R\aleaseId\x12\x1b\n" +
+	"\trun_epoch\x18\x03 \x01(\rR\brunEpoch\x12\x1f\n" +
+	"\vhistory_seq\x18\x04 \x01(\x04R\n" +
+	"historySeq\x12'\n" +
+	"\x0fprefix_checksum\x18\x05 \x01(\fR\x0eprefixChecksum\x129\n" +
+	"\bcommands\x18\x06 \x03(\v2\x1d.rota.v1.WorkflowCommandProtoR\bcommands\"O\n" +
+	"\x1bRespondWorkflowTaskResponse\x12\x18\n" +
+	"\aapplied\x18\x01 \x01(\bR\aapplied\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xc5\x01\n" +
+	"\x12PolledActivityTask\x12\x14\n" +
+	"\x05empty\x18\x01 \x01(\bR\x05empty\x12\x15\n" +
+	"\x06run_id\x18\x02 \x01(\x04R\x05runId\x12\x19\n" +
+	"\blease_id\x18\x03 \x01(\x04R\aleaseId\x12,\n" +
+	"\x12scheduled_event_id\x18\x04 \x01(\x04R\x10scheduledEventId\x12#\n" +
+	"\ractivity_type\x18\x05 \x01(\tR\factivityType\x12\x14\n" +
+	"\x05input\x18\x06 \x01(\fR\x05input\"\xae\x01\n" +
+	"\x1aRespondActivityTaskRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12\x19\n" +
+	"\blease_id\x18\x02 \x01(\x04R\aleaseId\x12,\n" +
+	"\x12scheduled_event_id\x18\x03 \x01(\x04R\x10scheduledEventId\x12\x18\n" +
+	"\asuccess\x18\x04 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06result\x18\x05 \x01(\fR\x06result\"\x1d\n" +
+	"\x1bRespondActivityTaskResponse\"n\n" +
+	"\x14StartWorkflowRequest\x12#\n" +
+	"\rworkflow_type\x18\x01 \x01(\tR\fworkflowType\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\".\n" +
+	"\x15StartWorkflowResponse\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\"i\n" +
+	"\x15SignalWorkflowRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12\x1f\n" +
+	"\vsignal_name\x18\x02 \x01(\tR\n" +
+	"signalName\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\"\x18\n" +
+	"\x16SignalWorkflowResponse\"F\n" +
+	"\x15CancelWorkflowRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\fR\x06reason\"4\n" +
+	"\x16CancelWorkflowResponse\x12\x1a\n" +
+	"\bcanceled\x18\x01 \x01(\bR\bcanceled\"'\n" +
+	"\x0eWorkflowRunRef\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\x04R\x05runId\"K\n" +
+	"\x1aGetWorkflowHistoryResponse\x12-\n" +
+	"\x06events\x18\x01 \x03(\v2\x15.rota.v1.HistoryEventR\x06events\"\xa5\x01\n" +
+	"\x17ListWorkflowRunsRequest\x12/\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x17.rota.v1.WorkflowStatusR\x06status\x12\x1d\n" +
+	"\n" +
+	"has_status\x18\x02 \x01(\bR\thasStatus\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\rR\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"l\n" +
+	"\x18ListWorkflowRunsResponse\x12(\n" +
+	"\x04runs\x18\x01 \x03(\v2\x14.rota.v1.WorkflowRunR\x04runs\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"*\n" +
+	"\x12ContinueAsNewAttrs\x12\x14\n" +
+	"\x05input\x18\x01 \x01(\fR\x05input*e\n" +
 	"\fMessageState\x12\x1d\n" +
 	"\x19MESSAGE_STATE_UNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05READY\x10\x01\x12\v\n" +
@@ -7085,7 +8383,18 @@ const file_rota_v1_rota_proto_rawDesc = "" +
 	"\fPeekMessages\x12\x1c.rota.v1.PeekMessagesRequest\x1a\x1d.rota.v1.PeekMessagesResponse\x12:\n" +
 	"\x0fGetLaneFairness\x12\x10.rota.v1.LaneRef\x1a\x15.rota.v1.LaneFairness\x12:\n" +
 	"\x0fGetPolicyHealth\x12\x10.rota.v1.LaneRef\x1a\x15.rota.v1.PolicyHealth\x12Z\n" +
-	"\x11RedriveDeadLetter\x12!.rota.v1.RedriveDeadLetterRequest\x1a\".rota.v1.RedriveDeadLetterResponseB/Z-github.com/tinkerhaus/rota/gen/rota/v1;rotav1b\x06proto3"
+	"\x11RedriveDeadLetter\x12!.rota.v1.RedriveDeadLetterRequest\x1a\".rota.v1.RedriveDeadLetterResponse2\xc8\x06\n" +
+	"\bWorkflow\x12N\n" +
+	"\rStartWorkflow\x12\x1d.rota.v1.StartWorkflowRequest\x1a\x1e.rota.v1.StartWorkflowResponse\x12Q\n" +
+	"\x0eSignalWorkflow\x12\x1e.rota.v1.SignalWorkflowRequest\x1a\x1f.rota.v1.SignalWorkflowResponse\x12Q\n" +
+	"\x0eCancelWorkflow\x12\x1e.rota.v1.CancelWorkflowRequest\x1a\x1f.rota.v1.CancelWorkflowResponse\x12?\n" +
+	"\x0eGetWorkflowRun\x12\x17.rota.v1.WorkflowRunRef\x1a\x14.rota.v1.WorkflowRun\x12R\n" +
+	"\x12GetWorkflowHistory\x12\x17.rota.v1.WorkflowRunRef\x1a#.rota.v1.GetWorkflowHistoryResponse\x12W\n" +
+	"\x10ListWorkflowRuns\x12 .rota.v1.ListWorkflowRunsRequest\x1a!.rota.v1.ListWorkflowRunsResponse\x12I\n" +
+	"\x10PollWorkflowTask\x12\x18.rota.v1.PollTaskRequest\x1a\x1b.rota.v1.PolledWorkflowTask\x12`\n" +
+	"\x13RespondWorkflowTask\x12#.rota.v1.RespondWorkflowTaskRequest\x1a$.rota.v1.RespondWorkflowTaskResponse\x12I\n" +
+	"\x10PollActivityTask\x12\x18.rota.v1.PollTaskRequest\x1a\x1b.rota.v1.PolledActivityTask\x12`\n" +
+	"\x13RespondActivityTask\x12#.rota.v1.RespondActivityTaskRequest\x1a$.rota.v1.RespondActivityTaskResponseB/Z-github.com/tinkerhaus/rota/gen/rota/v1;rotav1b\x06proto3"
 
 var (
 	file_rota_v1_rota_proto_rawDescOnce sync.Once
@@ -7100,129 +8409,150 @@ func file_rota_v1_rota_proto_rawDescGZIP() []byte {
 }
 
 var file_rota_v1_rota_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_rota_v1_rota_proto_msgTypes = make([]protoimpl.MessageInfo, 96)
+var file_rota_v1_rota_proto_msgTypes = make([]protoimpl.MessageInfo, 117)
 var file_rota_v1_rota_proto_goTypes = []any{
-	(MessageState)(0),                 // 0: rota.v1.MessageState
-	(NackMode)(0),                     // 1: rota.v1.NackMode
-	(Outcome)(0),                      // 2: rota.v1.Outcome
-	(ControlKind)(0),                  // 3: rota.v1.ControlKind
-	(ErrorCode)(0),                    // 4: rota.v1.ErrorCode
-	(PolicyKind)(0),                   // 5: rota.v1.PolicyKind
-	(PolicyMode)(0),                   // 6: rota.v1.PolicyMode
-	(MisfirePolicy)(0),                // 7: rota.v1.MisfirePolicy
-	(WorkflowStatus)(0),               // 8: rota.v1.WorkflowStatus
-	(HistoryEventType)(0),             // 9: rota.v1.HistoryEventType
-	(*Message)(nil),                   // 10: rota.v1.Message
-	(*GroupMeta)(nil),                 // 11: rota.v1.GroupMeta
-	(*Lease)(nil),                     // 12: rota.v1.Lease
-	(*DeadLetter)(nil),                // 13: rota.v1.DeadLetter
-	(*MessageSpec)(nil),               // 14: rota.v1.MessageSpec
-	(*RetryBackoff)(nil),              // 15: rota.v1.RetryBackoff
-	(*PublishRequest)(nil),            // 16: rota.v1.PublishRequest
-	(*PublishResponse)(nil),           // 17: rota.v1.PublishResponse
-	(*PublishBatchRequest)(nil),       // 18: rota.v1.PublishBatchRequest
-	(*PublishBatchResponse)(nil),      // 19: rota.v1.PublishBatchResponse
-	(*PublishItemResult)(nil),         // 20: rota.v1.PublishItemResult
-	(*WorkClientMsg)(nil),             // 21: rota.v1.WorkClientMsg
-	(*LeaseRequest)(nil),              // 22: rota.v1.LeaseRequest
-	(*Ack)(nil),                       // 23: rota.v1.Ack
-	(*Nack)(nil),                      // 24: rota.v1.Nack
-	(*ExtendVisibility)(nil),          // 25: rota.v1.ExtendVisibility
-	(*Complete)(nil),                  // 26: rota.v1.Complete
-	(*WorkServerMsg)(nil),             // 27: rota.v1.WorkServerMsg
-	(*LeasedMessage)(nil),             // 28: rota.v1.LeasedMessage
-	(*CreditGrant)(nil),               // 29: rota.v1.CreditGrant
-	(*ControlFrame)(nil),              // 30: rota.v1.ControlFrame
-	(*StreamError)(nil),               // 31: rota.v1.StreamError
-	(*NotLeader)(nil),                 // 32: rota.v1.NotLeader
-	(*LaneRef)(nil),                   // 33: rota.v1.LaneRef
-	(*GroupRef)(nil),                  // 34: rota.v1.GroupRef
-	(*LaneConfig)(nil),                // 35: rota.v1.LaneConfig
-	(*SetLaneConfigRequest)(nil),      // 36: rota.v1.SetLaneConfigRequest
-	(*PauseLaneRequest)(nil),          // 37: rota.v1.PauseLaneRequest
-	(*LaneOpResult)(nil),              // 38: rota.v1.LaneOpResult
-	(*GroupConfig)(nil),               // 39: rota.v1.GroupConfig
-	(*SetGroupConfigRequest)(nil),     // 40: rota.v1.SetGroupConfigRequest
-	(*GroupOpResult)(nil),             // 41: rota.v1.GroupOpResult
-	(*TeardownRequest)(nil),           // 42: rota.v1.TeardownRequest
-	(*TeardownResult)(nil),            // 43: rota.v1.TeardownResult
-	(*PolicySource)(nil),              // 44: rota.v1.PolicySource
-	(*SetPolicyRequest)(nil),          // 45: rota.v1.SetPolicyRequest
-	(*PolicyInfo)(nil),                // 46: rota.v1.PolicyInfo
-	(*ValidatePolicyResult)(nil),      // 47: rota.v1.ValidatePolicyResult
-	(*ScheduleCronRequest)(nil),       // 48: rota.v1.ScheduleCronRequest
-	(*CronRef)(nil),                   // 49: rota.v1.CronRef
-	(*CronInfo)(nil),                  // 50: rota.v1.CronInfo
-	(*ListCronRequest)(nil),           // 51: rota.v1.ListCronRequest
-	(*ListCronResponse)(nil),          // 52: rota.v1.ListCronResponse
-	(*NextFires)(nil),                 // 53: rota.v1.NextFires
-	(*CronOpResult)(nil),              // 54: rota.v1.CronOpResult
-	(*SingletonLease)(nil),            // 55: rota.v1.SingletonLease
-	(*AcquireSingletonRequest)(nil),   // 56: rota.v1.AcquireSingletonRequest
-	(*RenewSingletonRequest)(nil),     // 57: rota.v1.RenewSingletonRequest
-	(*ReleaseSingletonRequest)(nil),   // 58: rota.v1.ReleaseSingletonRequest
-	(*SingletonOpResult)(nil),         // 59: rota.v1.SingletonOpResult
-	(*CompleteByTokenRequest)(nil),    // 60: rota.v1.CompleteByTokenRequest
-	(*CompleteResult)(nil),            // 61: rota.v1.CompleteResult
-	(*GetStatsRequest)(nil),           // 62: rota.v1.GetStatsRequest
-	(*StatsResponse)(nil),             // 63: rota.v1.StatsResponse
-	(*LaneStats)(nil),                 // 64: rota.v1.LaneStats
-	(*ListGroupsRequest)(nil),         // 65: rota.v1.ListGroupsRequest
-	(*GroupStats)(nil),                // 66: rota.v1.GroupStats
-	(*ListGroupsResponse)(nil),        // 67: rota.v1.ListGroupsResponse
-	(*ListDeadLettersRequest)(nil),    // 68: rota.v1.ListDeadLettersRequest
-	(*DeadLetterInfo)(nil),            // 69: rota.v1.DeadLetterInfo
-	(*ListDeadLettersResponse)(nil),   // 70: rota.v1.ListDeadLettersResponse
-	(*ListLeasesRequest)(nil),         // 71: rota.v1.ListLeasesRequest
-	(*LeaseInfo)(nil),                 // 72: rota.v1.LeaseInfo
-	(*ListLeasesResponse)(nil),        // 73: rota.v1.ListLeasesResponse
-	(*PeekMessagesRequest)(nil),       // 74: rota.v1.PeekMessagesRequest
-	(*MessagePeek)(nil),               // 75: rota.v1.MessagePeek
-	(*PeekMessagesResponse)(nil),      // 76: rota.v1.PeekMessagesResponse
-	(*GroupFairness)(nil),             // 77: rota.v1.GroupFairness
-	(*LaneFairness)(nil),              // 78: rota.v1.LaneFairness
-	(*PolicyHealth)(nil),              // 79: rota.v1.PolicyHealth
-	(*RedriveDeadLetterRequest)(nil),  // 80: rota.v1.RedriveDeadLetterRequest
-	(*RedriveDeadLetterResponse)(nil), // 81: rota.v1.RedriveDeadLetterResponse
-	(*DescribeClusterRequest)(nil),    // 82: rota.v1.DescribeClusterRequest
-	(*ClusterInfo)(nil),               // 83: rota.v1.ClusterInfo
-	(*PeerInfo)(nil),                  // 84: rota.v1.PeerInfo
-	(*HealthRequest)(nil),             // 85: rota.v1.HealthRequest
-	(*HealthResponse)(nil),            // 86: rota.v1.HealthResponse
-	(*HistoryEvent)(nil),              // 87: rota.v1.HistoryEvent
-	(*WorkflowRun)(nil),               // 88: rota.v1.WorkflowRun
-	(*ActivityScheduledAttrs)(nil),    // 89: rota.v1.ActivityScheduledAttrs
-	(*ActivityCompletedAttrs)(nil),    // 90: rota.v1.ActivityCompletedAttrs
-	(*ActivityTask)(nil),              // 91: rota.v1.ActivityTask
-	(*TimerStartedAttrs)(nil),         // 92: rota.v1.TimerStartedAttrs
-	(*TimerFiredAttrs)(nil),           // 93: rota.v1.TimerFiredAttrs
-	nil,                               // 94: rota.v1.Message.HeadersEntry
-	nil,                               // 95: rota.v1.DeadLetter.FailureHeadersEntry
-	nil,                               // 96: rota.v1.MessageSpec.HeadersEntry
-	nil,                               // 97: rota.v1.Nack.FailureMetaEntry
-	nil,                               // 98: rota.v1.Complete.ResultMetaEntry
-	nil,                               // 99: rota.v1.LeasedMessage.HeadersEntry
-	nil,                               // 100: rota.v1.PolicySource.ParamsEntry
-	nil,                               // 101: rota.v1.ScheduleCronRequest.HeadersEntry
-	nil,                               // 102: rota.v1.ListCronResponse.NextFiresEntry
-	nil,                               // 103: rota.v1.CompleteByTokenRequest.ResultMetaEntry
-	nil,                               // 104: rota.v1.DeadLetterInfo.FailureHeadersEntry
-	nil,                               // 105: rota.v1.DeadLetterInfo.HeadersEntry
-	(*durationpb.Duration)(nil),       // 106: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),     // 107: google.protobuf.Timestamp
+	(MessageState)(0),                   // 0: rota.v1.MessageState
+	(NackMode)(0),                       // 1: rota.v1.NackMode
+	(Outcome)(0),                        // 2: rota.v1.Outcome
+	(ControlKind)(0),                    // 3: rota.v1.ControlKind
+	(ErrorCode)(0),                      // 4: rota.v1.ErrorCode
+	(PolicyKind)(0),                     // 5: rota.v1.PolicyKind
+	(PolicyMode)(0),                     // 6: rota.v1.PolicyMode
+	(MisfirePolicy)(0),                  // 7: rota.v1.MisfirePolicy
+	(WorkflowStatus)(0),                 // 8: rota.v1.WorkflowStatus
+	(HistoryEventType)(0),               // 9: rota.v1.HistoryEventType
+	(*Message)(nil),                     // 10: rota.v1.Message
+	(*GroupMeta)(nil),                   // 11: rota.v1.GroupMeta
+	(*Lease)(nil),                       // 12: rota.v1.Lease
+	(*DeadLetter)(nil),                  // 13: rota.v1.DeadLetter
+	(*MessageSpec)(nil),                 // 14: rota.v1.MessageSpec
+	(*RetryBackoff)(nil),                // 15: rota.v1.RetryBackoff
+	(*PublishRequest)(nil),              // 16: rota.v1.PublishRequest
+	(*PublishResponse)(nil),             // 17: rota.v1.PublishResponse
+	(*PublishBatchRequest)(nil),         // 18: rota.v1.PublishBatchRequest
+	(*PublishBatchResponse)(nil),        // 19: rota.v1.PublishBatchResponse
+	(*PublishItemResult)(nil),           // 20: rota.v1.PublishItemResult
+	(*WorkClientMsg)(nil),               // 21: rota.v1.WorkClientMsg
+	(*LeaseRequest)(nil),                // 22: rota.v1.LeaseRequest
+	(*Ack)(nil),                         // 23: rota.v1.Ack
+	(*Nack)(nil),                        // 24: rota.v1.Nack
+	(*ExtendVisibility)(nil),            // 25: rota.v1.ExtendVisibility
+	(*Complete)(nil),                    // 26: rota.v1.Complete
+	(*WorkServerMsg)(nil),               // 27: rota.v1.WorkServerMsg
+	(*LeasedMessage)(nil),               // 28: rota.v1.LeasedMessage
+	(*CreditGrant)(nil),                 // 29: rota.v1.CreditGrant
+	(*ControlFrame)(nil),                // 30: rota.v1.ControlFrame
+	(*StreamError)(nil),                 // 31: rota.v1.StreamError
+	(*NotLeader)(nil),                   // 32: rota.v1.NotLeader
+	(*LaneRef)(nil),                     // 33: rota.v1.LaneRef
+	(*GroupRef)(nil),                    // 34: rota.v1.GroupRef
+	(*LaneConfig)(nil),                  // 35: rota.v1.LaneConfig
+	(*SetLaneConfigRequest)(nil),        // 36: rota.v1.SetLaneConfigRequest
+	(*PauseLaneRequest)(nil),            // 37: rota.v1.PauseLaneRequest
+	(*LaneOpResult)(nil),                // 38: rota.v1.LaneOpResult
+	(*GroupConfig)(nil),                 // 39: rota.v1.GroupConfig
+	(*SetGroupConfigRequest)(nil),       // 40: rota.v1.SetGroupConfigRequest
+	(*GroupOpResult)(nil),               // 41: rota.v1.GroupOpResult
+	(*TeardownRequest)(nil),             // 42: rota.v1.TeardownRequest
+	(*TeardownResult)(nil),              // 43: rota.v1.TeardownResult
+	(*PolicySource)(nil),                // 44: rota.v1.PolicySource
+	(*SetPolicyRequest)(nil),            // 45: rota.v1.SetPolicyRequest
+	(*PolicyInfo)(nil),                  // 46: rota.v1.PolicyInfo
+	(*ValidatePolicyResult)(nil),        // 47: rota.v1.ValidatePolicyResult
+	(*ScheduleCronRequest)(nil),         // 48: rota.v1.ScheduleCronRequest
+	(*CronRef)(nil),                     // 49: rota.v1.CronRef
+	(*CronInfo)(nil),                    // 50: rota.v1.CronInfo
+	(*ListCronRequest)(nil),             // 51: rota.v1.ListCronRequest
+	(*ListCronResponse)(nil),            // 52: rota.v1.ListCronResponse
+	(*NextFires)(nil),                   // 53: rota.v1.NextFires
+	(*CronOpResult)(nil),                // 54: rota.v1.CronOpResult
+	(*SingletonLease)(nil),              // 55: rota.v1.SingletonLease
+	(*AcquireSingletonRequest)(nil),     // 56: rota.v1.AcquireSingletonRequest
+	(*RenewSingletonRequest)(nil),       // 57: rota.v1.RenewSingletonRequest
+	(*ReleaseSingletonRequest)(nil),     // 58: rota.v1.ReleaseSingletonRequest
+	(*SingletonOpResult)(nil),           // 59: rota.v1.SingletonOpResult
+	(*CompleteByTokenRequest)(nil),      // 60: rota.v1.CompleteByTokenRequest
+	(*CompleteResult)(nil),              // 61: rota.v1.CompleteResult
+	(*GetStatsRequest)(nil),             // 62: rota.v1.GetStatsRequest
+	(*StatsResponse)(nil),               // 63: rota.v1.StatsResponse
+	(*LaneStats)(nil),                   // 64: rota.v1.LaneStats
+	(*ListGroupsRequest)(nil),           // 65: rota.v1.ListGroupsRequest
+	(*GroupStats)(nil),                  // 66: rota.v1.GroupStats
+	(*ListGroupsResponse)(nil),          // 67: rota.v1.ListGroupsResponse
+	(*ListDeadLettersRequest)(nil),      // 68: rota.v1.ListDeadLettersRequest
+	(*DeadLetterInfo)(nil),              // 69: rota.v1.DeadLetterInfo
+	(*ListDeadLettersResponse)(nil),     // 70: rota.v1.ListDeadLettersResponse
+	(*ListLeasesRequest)(nil),           // 71: rota.v1.ListLeasesRequest
+	(*LeaseInfo)(nil),                   // 72: rota.v1.LeaseInfo
+	(*ListLeasesResponse)(nil),          // 73: rota.v1.ListLeasesResponse
+	(*PeekMessagesRequest)(nil),         // 74: rota.v1.PeekMessagesRequest
+	(*MessagePeek)(nil),                 // 75: rota.v1.MessagePeek
+	(*PeekMessagesResponse)(nil),        // 76: rota.v1.PeekMessagesResponse
+	(*GroupFairness)(nil),               // 77: rota.v1.GroupFairness
+	(*LaneFairness)(nil),                // 78: rota.v1.LaneFairness
+	(*PolicyHealth)(nil),                // 79: rota.v1.PolicyHealth
+	(*RedriveDeadLetterRequest)(nil),    // 80: rota.v1.RedriveDeadLetterRequest
+	(*RedriveDeadLetterResponse)(nil),   // 81: rota.v1.RedriveDeadLetterResponse
+	(*DescribeClusterRequest)(nil),      // 82: rota.v1.DescribeClusterRequest
+	(*ClusterInfo)(nil),                 // 83: rota.v1.ClusterInfo
+	(*PeerInfo)(nil),                    // 84: rota.v1.PeerInfo
+	(*HealthRequest)(nil),               // 85: rota.v1.HealthRequest
+	(*HealthResponse)(nil),              // 86: rota.v1.HealthResponse
+	(*HistoryEvent)(nil),                // 87: rota.v1.HistoryEvent
+	(*WorkflowRun)(nil),                 // 88: rota.v1.WorkflowRun
+	(*WorkflowTaskRef)(nil),             // 89: rota.v1.WorkflowTaskRef
+	(*ActivityScheduledAttrs)(nil),      // 90: rota.v1.ActivityScheduledAttrs
+	(*ActivityCompletedAttrs)(nil),      // 91: rota.v1.ActivityCompletedAttrs
+	(*ActivityTask)(nil),                // 92: rota.v1.ActivityTask
+	(*TimerStartedAttrs)(nil),           // 93: rota.v1.TimerStartedAttrs
+	(*TimerFiredAttrs)(nil),             // 94: rota.v1.TimerFiredAttrs
+	(*SignalReceivedAttrs)(nil),         // 95: rota.v1.SignalReceivedAttrs
+	(*PollTaskRequest)(nil),             // 96: rota.v1.PollTaskRequest
+	(*PolledWorkflowTask)(nil),          // 97: rota.v1.PolledWorkflowTask
+	(*WorkflowCommandProto)(nil),        // 98: rota.v1.WorkflowCommandProto
+	(*RespondWorkflowTaskRequest)(nil),  // 99: rota.v1.RespondWorkflowTaskRequest
+	(*RespondWorkflowTaskResponse)(nil), // 100: rota.v1.RespondWorkflowTaskResponse
+	(*PolledActivityTask)(nil),          // 101: rota.v1.PolledActivityTask
+	(*RespondActivityTaskRequest)(nil),  // 102: rota.v1.RespondActivityTaskRequest
+	(*RespondActivityTaskResponse)(nil), // 103: rota.v1.RespondActivityTaskResponse
+	(*StartWorkflowRequest)(nil),        // 104: rota.v1.StartWorkflowRequest
+	(*StartWorkflowResponse)(nil),       // 105: rota.v1.StartWorkflowResponse
+	(*SignalWorkflowRequest)(nil),       // 106: rota.v1.SignalWorkflowRequest
+	(*SignalWorkflowResponse)(nil),      // 107: rota.v1.SignalWorkflowResponse
+	(*CancelWorkflowRequest)(nil),       // 108: rota.v1.CancelWorkflowRequest
+	(*CancelWorkflowResponse)(nil),      // 109: rota.v1.CancelWorkflowResponse
+	(*WorkflowRunRef)(nil),              // 110: rota.v1.WorkflowRunRef
+	(*GetWorkflowHistoryResponse)(nil),  // 111: rota.v1.GetWorkflowHistoryResponse
+	(*ListWorkflowRunsRequest)(nil),     // 112: rota.v1.ListWorkflowRunsRequest
+	(*ListWorkflowRunsResponse)(nil),    // 113: rota.v1.ListWorkflowRunsResponse
+	(*ContinueAsNewAttrs)(nil),          // 114: rota.v1.ContinueAsNewAttrs
+	nil,                                 // 115: rota.v1.Message.HeadersEntry
+	nil,                                 // 116: rota.v1.DeadLetter.FailureHeadersEntry
+	nil,                                 // 117: rota.v1.MessageSpec.HeadersEntry
+	nil,                                 // 118: rota.v1.Nack.FailureMetaEntry
+	nil,                                 // 119: rota.v1.Complete.ResultMetaEntry
+	nil,                                 // 120: rota.v1.LeasedMessage.HeadersEntry
+	nil,                                 // 121: rota.v1.PolicySource.ParamsEntry
+	nil,                                 // 122: rota.v1.ScheduleCronRequest.HeadersEntry
+	nil,                                 // 123: rota.v1.ListCronResponse.NextFiresEntry
+	nil,                                 // 124: rota.v1.CompleteByTokenRequest.ResultMetaEntry
+	nil,                                 // 125: rota.v1.DeadLetterInfo.FailureHeadersEntry
+	nil,                                 // 126: rota.v1.DeadLetterInfo.HeadersEntry
+	(*durationpb.Duration)(nil),         // 127: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),       // 128: google.protobuf.Timestamp
 }
 var file_rota_v1_rota_proto_depIdxs = []int32{
-	94,  // 0: rota.v1.Message.headers:type_name -> rota.v1.Message.HeadersEntry
+	115, // 0: rota.v1.Message.headers:type_name -> rota.v1.Message.HeadersEntry
 	0,   // 1: rota.v1.Message.state:type_name -> rota.v1.MessageState
 	10,  // 2: rota.v1.DeadLetter.original:type_name -> rota.v1.Message
-	95,  // 3: rota.v1.DeadLetter.failure_headers:type_name -> rota.v1.DeadLetter.FailureHeadersEntry
-	96,  // 4: rota.v1.MessageSpec.headers:type_name -> rota.v1.MessageSpec.HeadersEntry
-	106, // 5: rota.v1.MessageSpec.delay:type_name -> google.protobuf.Duration
-	107, // 6: rota.v1.MessageSpec.at:type_name -> google.protobuf.Timestamp
+	116, // 3: rota.v1.DeadLetter.failure_headers:type_name -> rota.v1.DeadLetter.FailureHeadersEntry
+	117, // 4: rota.v1.MessageSpec.headers:type_name -> rota.v1.MessageSpec.HeadersEntry
+	127, // 5: rota.v1.MessageSpec.delay:type_name -> google.protobuf.Duration
+	128, // 6: rota.v1.MessageSpec.at:type_name -> google.protobuf.Timestamp
 	15,  // 7: rota.v1.MessageSpec.retry_backoff:type_name -> rota.v1.RetryBackoff
-	106, // 8: rota.v1.MessageSpec.ttl:type_name -> google.protobuf.Duration
-	106, // 9: rota.v1.RetryBackoff.base:type_name -> google.protobuf.Duration
-	106, // 10: rota.v1.RetryBackoff.max:type_name -> google.protobuf.Duration
+	127, // 8: rota.v1.MessageSpec.ttl:type_name -> google.protobuf.Duration
+	127, // 9: rota.v1.RetryBackoff.base:type_name -> google.protobuf.Duration
+	127, // 10: rota.v1.RetryBackoff.max:type_name -> google.protobuf.Duration
 	14,  // 11: rota.v1.PublishRequest.message:type_name -> rota.v1.MessageSpec
 	14,  // 12: rota.v1.PublishBatchRequest.messages:type_name -> rota.v1.MessageSpec
 	20,  // 13: rota.v1.PublishBatchResponse.results:type_name -> rota.v1.PublishItemResult
@@ -7233,41 +8563,41 @@ var file_rota_v1_rota_proto_depIdxs = []int32{
 	25,  // 18: rota.v1.WorkClientMsg.extend:type_name -> rota.v1.ExtendVisibility
 	26,  // 19: rota.v1.WorkClientMsg.complete:type_name -> rota.v1.Complete
 	1,   // 20: rota.v1.Nack.mode:type_name -> rota.v1.NackMode
-	106, // 21: rota.v1.Nack.delay:type_name -> google.protobuf.Duration
-	97,  // 22: rota.v1.Nack.failure_meta:type_name -> rota.v1.Nack.FailureMetaEntry
-	106, // 23: rota.v1.ExtendVisibility.ttl:type_name -> google.protobuf.Duration
+	127, // 21: rota.v1.Nack.delay:type_name -> google.protobuf.Duration
+	118, // 22: rota.v1.Nack.failure_meta:type_name -> rota.v1.Nack.FailureMetaEntry
+	127, // 23: rota.v1.ExtendVisibility.ttl:type_name -> google.protobuf.Duration
 	2,   // 24: rota.v1.Complete.outcome:type_name -> rota.v1.Outcome
-	98,  // 25: rota.v1.Complete.result_meta:type_name -> rota.v1.Complete.ResultMetaEntry
-	106, // 26: rota.v1.Complete.delay:type_name -> google.protobuf.Duration
+	119, // 25: rota.v1.Complete.result_meta:type_name -> rota.v1.Complete.ResultMetaEntry
+	127, // 26: rota.v1.Complete.delay:type_name -> google.protobuf.Duration
 	28,  // 27: rota.v1.WorkServerMsg.lease:type_name -> rota.v1.LeasedMessage
 	29,  // 28: rota.v1.WorkServerMsg.credit:type_name -> rota.v1.CreditGrant
 	30,  // 29: rota.v1.WorkServerMsg.control:type_name -> rota.v1.ControlFrame
 	31,  // 30: rota.v1.WorkServerMsg.error:type_name -> rota.v1.StreamError
-	99,  // 31: rota.v1.LeasedMessage.headers:type_name -> rota.v1.LeasedMessage.HeadersEntry
-	107, // 32: rota.v1.LeasedMessage.visibility_deadline:type_name -> google.protobuf.Timestamp
+	120, // 31: rota.v1.LeasedMessage.headers:type_name -> rota.v1.LeasedMessage.HeadersEntry
+	128, // 32: rota.v1.LeasedMessage.visibility_deadline:type_name -> google.protobuf.Timestamp
 	3,   // 33: rota.v1.ControlFrame.kind:type_name -> rota.v1.ControlKind
 	4,   // 34: rota.v1.StreamError.code:type_name -> rota.v1.ErrorCode
-	106, // 35: rota.v1.PauseLaneRequest.duration:type_name -> google.protobuf.Duration
+	127, // 35: rota.v1.PauseLaneRequest.duration:type_name -> google.protobuf.Duration
 	5,   // 36: rota.v1.PolicySource.kind:type_name -> rota.v1.PolicyKind
 	6,   // 37: rota.v1.PolicySource.mode:type_name -> rota.v1.PolicyMode
-	100, // 38: rota.v1.PolicySource.params:type_name -> rota.v1.PolicySource.ParamsEntry
+	121, // 38: rota.v1.PolicySource.params:type_name -> rota.v1.PolicySource.ParamsEntry
 	44,  // 39: rota.v1.SetPolicyRequest.source:type_name -> rota.v1.PolicySource
 	44,  // 40: rota.v1.PolicyInfo.source:type_name -> rota.v1.PolicySource
-	101, // 41: rota.v1.ScheduleCronRequest.headers:type_name -> rota.v1.ScheduleCronRequest.HeadersEntry
+	122, // 41: rota.v1.ScheduleCronRequest.headers:type_name -> rota.v1.ScheduleCronRequest.HeadersEntry
 	7,   // 42: rota.v1.ScheduleCronRequest.misfire:type_name -> rota.v1.MisfirePolicy
-	107, // 43: rota.v1.ScheduleCronRequest.start_at:type_name -> google.protobuf.Timestamp
-	107, // 44: rota.v1.ScheduleCronRequest.end_at:type_name -> google.protobuf.Timestamp
+	128, // 43: rota.v1.ScheduleCronRequest.start_at:type_name -> google.protobuf.Timestamp
+	128, // 44: rota.v1.ScheduleCronRequest.end_at:type_name -> google.protobuf.Timestamp
 	50,  // 45: rota.v1.ListCronResponse.crons:type_name -> rota.v1.CronInfo
-	102, // 46: rota.v1.ListCronResponse.next_fires:type_name -> rota.v1.ListCronResponse.NextFiresEntry
-	106, // 47: rota.v1.AcquireSingletonRequest.ttl:type_name -> google.protobuf.Duration
-	106, // 48: rota.v1.RenewSingletonRequest.ttl:type_name -> google.protobuf.Duration
+	123, // 46: rota.v1.ListCronResponse.next_fires:type_name -> rota.v1.ListCronResponse.NextFiresEntry
+	127, // 47: rota.v1.AcquireSingletonRequest.ttl:type_name -> google.protobuf.Duration
+	127, // 48: rota.v1.RenewSingletonRequest.ttl:type_name -> google.protobuf.Duration
 	2,   // 49: rota.v1.CompleteByTokenRequest.outcome:type_name -> rota.v1.Outcome
-	103, // 50: rota.v1.CompleteByTokenRequest.result_meta:type_name -> rota.v1.CompleteByTokenRequest.ResultMetaEntry
-	106, // 51: rota.v1.CompleteByTokenRequest.delay:type_name -> google.protobuf.Duration
+	124, // 50: rota.v1.CompleteByTokenRequest.result_meta:type_name -> rota.v1.CompleteByTokenRequest.ResultMetaEntry
+	127, // 51: rota.v1.CompleteByTokenRequest.delay:type_name -> google.protobuf.Duration
 	64,  // 52: rota.v1.StatsResponse.lanes:type_name -> rota.v1.LaneStats
 	66,  // 53: rota.v1.ListGroupsResponse.groups:type_name -> rota.v1.GroupStats
-	104, // 54: rota.v1.DeadLetterInfo.failure_headers:type_name -> rota.v1.DeadLetterInfo.FailureHeadersEntry
-	105, // 55: rota.v1.DeadLetterInfo.headers:type_name -> rota.v1.DeadLetterInfo.HeadersEntry
+	125, // 54: rota.v1.DeadLetterInfo.failure_headers:type_name -> rota.v1.DeadLetterInfo.FailureHeadersEntry
+	126, // 55: rota.v1.DeadLetterInfo.headers:type_name -> rota.v1.DeadLetterInfo.HeadersEntry
 	69,  // 56: rota.v1.ListDeadLettersResponse.dead_letters:type_name -> rota.v1.DeadLetterInfo
 	72,  // 57: rota.v1.ListLeasesResponse.leases:type_name -> rota.v1.LeaseInfo
 	0,   // 58: rota.v1.MessagePeek.state:type_name -> rota.v1.MessageState
@@ -7276,82 +8606,107 @@ var file_rota_v1_rota_proto_depIdxs = []int32{
 	84,  // 61: rota.v1.ClusterInfo.peers:type_name -> rota.v1.PeerInfo
 	9,   // 62: rota.v1.HistoryEvent.event_type:type_name -> rota.v1.HistoryEventType
 	8,   // 63: rota.v1.WorkflowRun.status:type_name -> rota.v1.WorkflowStatus
-	53,  // 64: rota.v1.ListCronResponse.NextFiresEntry.value:type_name -> rota.v1.NextFires
-	16,  // 65: rota.v1.Broker.Publish:input_type -> rota.v1.PublishRequest
-	18,  // 66: rota.v1.Broker.PublishBatch:input_type -> rota.v1.PublishBatchRequest
-	21,  // 67: rota.v1.Broker.Work:input_type -> rota.v1.WorkClientMsg
-	40,  // 68: rota.v1.Control.SetGroupConfig:input_type -> rota.v1.SetGroupConfigRequest
-	34,  // 69: rota.v1.Control.GetGroupConfig:input_type -> rota.v1.GroupRef
-	34,  // 70: rota.v1.Control.PauseGroup:input_type -> rota.v1.GroupRef
-	34,  // 71: rota.v1.Control.ResumeGroup:input_type -> rota.v1.GroupRef
-	34,  // 72: rota.v1.Control.CancelGroup:input_type -> rota.v1.GroupRef
-	34,  // 73: rota.v1.Control.PurgeGroup:input_type -> rota.v1.GroupRef
-	34,  // 74: rota.v1.Control.ReapGroup:input_type -> rota.v1.GroupRef
-	42,  // 75: rota.v1.Control.TeardownGroup:input_type -> rota.v1.TeardownRequest
-	36,  // 76: rota.v1.Control.SetLaneConfig:input_type -> rota.v1.SetLaneConfigRequest
-	37,  // 77: rota.v1.Control.PauseLane:input_type -> rota.v1.PauseLaneRequest
-	33,  // 78: rota.v1.Control.ResumeLane:input_type -> rota.v1.LaneRef
-	45,  // 79: rota.v1.Control.SetPolicy:input_type -> rota.v1.SetPolicyRequest
-	33,  // 80: rota.v1.Control.GetPolicy:input_type -> rota.v1.LaneRef
-	45,  // 81: rota.v1.Control.ValidatePolicy:input_type -> rota.v1.SetPolicyRequest
-	48,  // 82: rota.v1.Control.ScheduleCron:input_type -> rota.v1.ScheduleCronRequest
-	51,  // 83: rota.v1.Control.ListCron:input_type -> rota.v1.ListCronRequest
-	49,  // 84: rota.v1.Control.DeleteCron:input_type -> rota.v1.CronRef
-	49,  // 85: rota.v1.Control.PauseCron:input_type -> rota.v1.CronRef
-	56,  // 86: rota.v1.Control.AcquireSingletonLease:input_type -> rota.v1.AcquireSingletonRequest
-	57,  // 87: rota.v1.Control.RenewSingletonLease:input_type -> rota.v1.RenewSingletonRequest
-	58,  // 88: rota.v1.Control.ReleaseSingletonLease:input_type -> rota.v1.ReleaseSingletonRequest
-	60,  // 89: rota.v1.Control.CompleteByToken:input_type -> rota.v1.CompleteByTokenRequest
-	62,  // 90: rota.v1.Control.GetStats:input_type -> rota.v1.GetStatsRequest
-	82,  // 91: rota.v1.Control.DescribeCluster:input_type -> rota.v1.DescribeClusterRequest
-	85,  // 92: rota.v1.Control.Health:input_type -> rota.v1.HealthRequest
-	65,  // 93: rota.v1.Control.ListGroups:input_type -> rota.v1.ListGroupsRequest
-	68,  // 94: rota.v1.Control.ListDeadLetters:input_type -> rota.v1.ListDeadLettersRequest
-	71,  // 95: rota.v1.Control.ListLeases:input_type -> rota.v1.ListLeasesRequest
-	74,  // 96: rota.v1.Control.PeekMessages:input_type -> rota.v1.PeekMessagesRequest
-	33,  // 97: rota.v1.Control.GetLaneFairness:input_type -> rota.v1.LaneRef
-	33,  // 98: rota.v1.Control.GetPolicyHealth:input_type -> rota.v1.LaneRef
-	80,  // 99: rota.v1.Control.RedriveDeadLetter:input_type -> rota.v1.RedriveDeadLetterRequest
-	17,  // 100: rota.v1.Broker.Publish:output_type -> rota.v1.PublishResponse
-	19,  // 101: rota.v1.Broker.PublishBatch:output_type -> rota.v1.PublishBatchResponse
-	27,  // 102: rota.v1.Broker.Work:output_type -> rota.v1.WorkServerMsg
-	39,  // 103: rota.v1.Control.SetGroupConfig:output_type -> rota.v1.GroupConfig
-	39,  // 104: rota.v1.Control.GetGroupConfig:output_type -> rota.v1.GroupConfig
-	39,  // 105: rota.v1.Control.PauseGroup:output_type -> rota.v1.GroupConfig
-	39,  // 106: rota.v1.Control.ResumeGroup:output_type -> rota.v1.GroupConfig
-	41,  // 107: rota.v1.Control.CancelGroup:output_type -> rota.v1.GroupOpResult
-	41,  // 108: rota.v1.Control.PurgeGroup:output_type -> rota.v1.GroupOpResult
-	41,  // 109: rota.v1.Control.ReapGroup:output_type -> rota.v1.GroupOpResult
-	43,  // 110: rota.v1.Control.TeardownGroup:output_type -> rota.v1.TeardownResult
-	35,  // 111: rota.v1.Control.SetLaneConfig:output_type -> rota.v1.LaneConfig
-	38,  // 112: rota.v1.Control.PauseLane:output_type -> rota.v1.LaneOpResult
-	38,  // 113: rota.v1.Control.ResumeLane:output_type -> rota.v1.LaneOpResult
-	46,  // 114: rota.v1.Control.SetPolicy:output_type -> rota.v1.PolicyInfo
-	46,  // 115: rota.v1.Control.GetPolicy:output_type -> rota.v1.PolicyInfo
-	47,  // 116: rota.v1.Control.ValidatePolicy:output_type -> rota.v1.ValidatePolicyResult
-	50,  // 117: rota.v1.Control.ScheduleCron:output_type -> rota.v1.CronInfo
-	52,  // 118: rota.v1.Control.ListCron:output_type -> rota.v1.ListCronResponse
-	54,  // 119: rota.v1.Control.DeleteCron:output_type -> rota.v1.CronOpResult
-	50,  // 120: rota.v1.Control.PauseCron:output_type -> rota.v1.CronInfo
-	55,  // 121: rota.v1.Control.AcquireSingletonLease:output_type -> rota.v1.SingletonLease
-	55,  // 122: rota.v1.Control.RenewSingletonLease:output_type -> rota.v1.SingletonLease
-	59,  // 123: rota.v1.Control.ReleaseSingletonLease:output_type -> rota.v1.SingletonOpResult
-	61,  // 124: rota.v1.Control.CompleteByToken:output_type -> rota.v1.CompleteResult
-	63,  // 125: rota.v1.Control.GetStats:output_type -> rota.v1.StatsResponse
-	83,  // 126: rota.v1.Control.DescribeCluster:output_type -> rota.v1.ClusterInfo
-	86,  // 127: rota.v1.Control.Health:output_type -> rota.v1.HealthResponse
-	67,  // 128: rota.v1.Control.ListGroups:output_type -> rota.v1.ListGroupsResponse
-	70,  // 129: rota.v1.Control.ListDeadLetters:output_type -> rota.v1.ListDeadLettersResponse
-	73,  // 130: rota.v1.Control.ListLeases:output_type -> rota.v1.ListLeasesResponse
-	76,  // 131: rota.v1.Control.PeekMessages:output_type -> rota.v1.PeekMessagesResponse
-	78,  // 132: rota.v1.Control.GetLaneFairness:output_type -> rota.v1.LaneFairness
-	79,  // 133: rota.v1.Control.GetPolicyHealth:output_type -> rota.v1.PolicyHealth
-	81,  // 134: rota.v1.Control.RedriveDeadLetter:output_type -> rota.v1.RedriveDeadLetterResponse
-	100, // [100:135] is the sub-list for method output_type
-	65,  // [65:100] is the sub-list for method input_type
-	65,  // [65:65] is the sub-list for extension type_name
-	65,  // [65:65] is the sub-list for extension extendee
-	0,   // [0:65] is the sub-list for field type_name
+	87,  // 64: rota.v1.PolledWorkflowTask.history:type_name -> rota.v1.HistoryEvent
+	98,  // 65: rota.v1.RespondWorkflowTaskRequest.commands:type_name -> rota.v1.WorkflowCommandProto
+	87,  // 66: rota.v1.GetWorkflowHistoryResponse.events:type_name -> rota.v1.HistoryEvent
+	8,   // 67: rota.v1.ListWorkflowRunsRequest.status:type_name -> rota.v1.WorkflowStatus
+	88,  // 68: rota.v1.ListWorkflowRunsResponse.runs:type_name -> rota.v1.WorkflowRun
+	53,  // 69: rota.v1.ListCronResponse.NextFiresEntry.value:type_name -> rota.v1.NextFires
+	16,  // 70: rota.v1.Broker.Publish:input_type -> rota.v1.PublishRequest
+	18,  // 71: rota.v1.Broker.PublishBatch:input_type -> rota.v1.PublishBatchRequest
+	21,  // 72: rota.v1.Broker.Work:input_type -> rota.v1.WorkClientMsg
+	40,  // 73: rota.v1.Control.SetGroupConfig:input_type -> rota.v1.SetGroupConfigRequest
+	34,  // 74: rota.v1.Control.GetGroupConfig:input_type -> rota.v1.GroupRef
+	34,  // 75: rota.v1.Control.PauseGroup:input_type -> rota.v1.GroupRef
+	34,  // 76: rota.v1.Control.ResumeGroup:input_type -> rota.v1.GroupRef
+	34,  // 77: rota.v1.Control.CancelGroup:input_type -> rota.v1.GroupRef
+	34,  // 78: rota.v1.Control.PurgeGroup:input_type -> rota.v1.GroupRef
+	34,  // 79: rota.v1.Control.ReapGroup:input_type -> rota.v1.GroupRef
+	42,  // 80: rota.v1.Control.TeardownGroup:input_type -> rota.v1.TeardownRequest
+	36,  // 81: rota.v1.Control.SetLaneConfig:input_type -> rota.v1.SetLaneConfigRequest
+	37,  // 82: rota.v1.Control.PauseLane:input_type -> rota.v1.PauseLaneRequest
+	33,  // 83: rota.v1.Control.ResumeLane:input_type -> rota.v1.LaneRef
+	45,  // 84: rota.v1.Control.SetPolicy:input_type -> rota.v1.SetPolicyRequest
+	33,  // 85: rota.v1.Control.GetPolicy:input_type -> rota.v1.LaneRef
+	45,  // 86: rota.v1.Control.ValidatePolicy:input_type -> rota.v1.SetPolicyRequest
+	48,  // 87: rota.v1.Control.ScheduleCron:input_type -> rota.v1.ScheduleCronRequest
+	51,  // 88: rota.v1.Control.ListCron:input_type -> rota.v1.ListCronRequest
+	49,  // 89: rota.v1.Control.DeleteCron:input_type -> rota.v1.CronRef
+	49,  // 90: rota.v1.Control.PauseCron:input_type -> rota.v1.CronRef
+	56,  // 91: rota.v1.Control.AcquireSingletonLease:input_type -> rota.v1.AcquireSingletonRequest
+	57,  // 92: rota.v1.Control.RenewSingletonLease:input_type -> rota.v1.RenewSingletonRequest
+	58,  // 93: rota.v1.Control.ReleaseSingletonLease:input_type -> rota.v1.ReleaseSingletonRequest
+	60,  // 94: rota.v1.Control.CompleteByToken:input_type -> rota.v1.CompleteByTokenRequest
+	62,  // 95: rota.v1.Control.GetStats:input_type -> rota.v1.GetStatsRequest
+	82,  // 96: rota.v1.Control.DescribeCluster:input_type -> rota.v1.DescribeClusterRequest
+	85,  // 97: rota.v1.Control.Health:input_type -> rota.v1.HealthRequest
+	65,  // 98: rota.v1.Control.ListGroups:input_type -> rota.v1.ListGroupsRequest
+	68,  // 99: rota.v1.Control.ListDeadLetters:input_type -> rota.v1.ListDeadLettersRequest
+	71,  // 100: rota.v1.Control.ListLeases:input_type -> rota.v1.ListLeasesRequest
+	74,  // 101: rota.v1.Control.PeekMessages:input_type -> rota.v1.PeekMessagesRequest
+	33,  // 102: rota.v1.Control.GetLaneFairness:input_type -> rota.v1.LaneRef
+	33,  // 103: rota.v1.Control.GetPolicyHealth:input_type -> rota.v1.LaneRef
+	80,  // 104: rota.v1.Control.RedriveDeadLetter:input_type -> rota.v1.RedriveDeadLetterRequest
+	104, // 105: rota.v1.Workflow.StartWorkflow:input_type -> rota.v1.StartWorkflowRequest
+	106, // 106: rota.v1.Workflow.SignalWorkflow:input_type -> rota.v1.SignalWorkflowRequest
+	108, // 107: rota.v1.Workflow.CancelWorkflow:input_type -> rota.v1.CancelWorkflowRequest
+	110, // 108: rota.v1.Workflow.GetWorkflowRun:input_type -> rota.v1.WorkflowRunRef
+	110, // 109: rota.v1.Workflow.GetWorkflowHistory:input_type -> rota.v1.WorkflowRunRef
+	112, // 110: rota.v1.Workflow.ListWorkflowRuns:input_type -> rota.v1.ListWorkflowRunsRequest
+	96,  // 111: rota.v1.Workflow.PollWorkflowTask:input_type -> rota.v1.PollTaskRequest
+	99,  // 112: rota.v1.Workflow.RespondWorkflowTask:input_type -> rota.v1.RespondWorkflowTaskRequest
+	96,  // 113: rota.v1.Workflow.PollActivityTask:input_type -> rota.v1.PollTaskRequest
+	102, // 114: rota.v1.Workflow.RespondActivityTask:input_type -> rota.v1.RespondActivityTaskRequest
+	17,  // 115: rota.v1.Broker.Publish:output_type -> rota.v1.PublishResponse
+	19,  // 116: rota.v1.Broker.PublishBatch:output_type -> rota.v1.PublishBatchResponse
+	27,  // 117: rota.v1.Broker.Work:output_type -> rota.v1.WorkServerMsg
+	39,  // 118: rota.v1.Control.SetGroupConfig:output_type -> rota.v1.GroupConfig
+	39,  // 119: rota.v1.Control.GetGroupConfig:output_type -> rota.v1.GroupConfig
+	39,  // 120: rota.v1.Control.PauseGroup:output_type -> rota.v1.GroupConfig
+	39,  // 121: rota.v1.Control.ResumeGroup:output_type -> rota.v1.GroupConfig
+	41,  // 122: rota.v1.Control.CancelGroup:output_type -> rota.v1.GroupOpResult
+	41,  // 123: rota.v1.Control.PurgeGroup:output_type -> rota.v1.GroupOpResult
+	41,  // 124: rota.v1.Control.ReapGroup:output_type -> rota.v1.GroupOpResult
+	43,  // 125: rota.v1.Control.TeardownGroup:output_type -> rota.v1.TeardownResult
+	35,  // 126: rota.v1.Control.SetLaneConfig:output_type -> rota.v1.LaneConfig
+	38,  // 127: rota.v1.Control.PauseLane:output_type -> rota.v1.LaneOpResult
+	38,  // 128: rota.v1.Control.ResumeLane:output_type -> rota.v1.LaneOpResult
+	46,  // 129: rota.v1.Control.SetPolicy:output_type -> rota.v1.PolicyInfo
+	46,  // 130: rota.v1.Control.GetPolicy:output_type -> rota.v1.PolicyInfo
+	47,  // 131: rota.v1.Control.ValidatePolicy:output_type -> rota.v1.ValidatePolicyResult
+	50,  // 132: rota.v1.Control.ScheduleCron:output_type -> rota.v1.CronInfo
+	52,  // 133: rota.v1.Control.ListCron:output_type -> rota.v1.ListCronResponse
+	54,  // 134: rota.v1.Control.DeleteCron:output_type -> rota.v1.CronOpResult
+	50,  // 135: rota.v1.Control.PauseCron:output_type -> rota.v1.CronInfo
+	55,  // 136: rota.v1.Control.AcquireSingletonLease:output_type -> rota.v1.SingletonLease
+	55,  // 137: rota.v1.Control.RenewSingletonLease:output_type -> rota.v1.SingletonLease
+	59,  // 138: rota.v1.Control.ReleaseSingletonLease:output_type -> rota.v1.SingletonOpResult
+	61,  // 139: rota.v1.Control.CompleteByToken:output_type -> rota.v1.CompleteResult
+	63,  // 140: rota.v1.Control.GetStats:output_type -> rota.v1.StatsResponse
+	83,  // 141: rota.v1.Control.DescribeCluster:output_type -> rota.v1.ClusterInfo
+	86,  // 142: rota.v1.Control.Health:output_type -> rota.v1.HealthResponse
+	67,  // 143: rota.v1.Control.ListGroups:output_type -> rota.v1.ListGroupsResponse
+	70,  // 144: rota.v1.Control.ListDeadLetters:output_type -> rota.v1.ListDeadLettersResponse
+	73,  // 145: rota.v1.Control.ListLeases:output_type -> rota.v1.ListLeasesResponse
+	76,  // 146: rota.v1.Control.PeekMessages:output_type -> rota.v1.PeekMessagesResponse
+	78,  // 147: rota.v1.Control.GetLaneFairness:output_type -> rota.v1.LaneFairness
+	79,  // 148: rota.v1.Control.GetPolicyHealth:output_type -> rota.v1.PolicyHealth
+	81,  // 149: rota.v1.Control.RedriveDeadLetter:output_type -> rota.v1.RedriveDeadLetterResponse
+	105, // 150: rota.v1.Workflow.StartWorkflow:output_type -> rota.v1.StartWorkflowResponse
+	107, // 151: rota.v1.Workflow.SignalWorkflow:output_type -> rota.v1.SignalWorkflowResponse
+	109, // 152: rota.v1.Workflow.CancelWorkflow:output_type -> rota.v1.CancelWorkflowResponse
+	88,  // 153: rota.v1.Workflow.GetWorkflowRun:output_type -> rota.v1.WorkflowRun
+	111, // 154: rota.v1.Workflow.GetWorkflowHistory:output_type -> rota.v1.GetWorkflowHistoryResponse
+	113, // 155: rota.v1.Workflow.ListWorkflowRuns:output_type -> rota.v1.ListWorkflowRunsResponse
+	97,  // 156: rota.v1.Workflow.PollWorkflowTask:output_type -> rota.v1.PolledWorkflowTask
+	100, // 157: rota.v1.Workflow.RespondWorkflowTask:output_type -> rota.v1.RespondWorkflowTaskResponse
+	101, // 158: rota.v1.Workflow.PollActivityTask:output_type -> rota.v1.PolledActivityTask
+	103, // 159: rota.v1.Workflow.RespondActivityTask:output_type -> rota.v1.RespondActivityTaskResponse
+	115, // [115:160] is the sub-list for method output_type
+	70,  // [70:115] is the sub-list for method input_type
+	70,  // [70:70] is the sub-list for extension type_name
+	70,  // [70:70] is the sub-list for extension extendee
+	0,   // [0:70] is the sub-list for field type_name
 }
 
 func init() { file_rota_v1_rota_proto_init() }
@@ -7383,9 +8738,9 @@ func file_rota_v1_rota_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rota_v1_rota_proto_rawDesc), len(file_rota_v1_rota_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   96,
+			NumMessages:   117,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_rota_v1_rota_proto_goTypes,
 		DependencyIndexes: file_rota_v1_rota_proto_depIdxs,

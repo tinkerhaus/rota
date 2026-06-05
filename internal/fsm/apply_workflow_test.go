@@ -1,7 +1,9 @@
 package fsm
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"testing"
 
 	"github.com/hashicorp/raft"
@@ -178,5 +180,65 @@ func TestWFActivityCompletionIsIdempotent(t *testing.T) {
 	}}).(*WFAppendResult)
 	if r3.Applied || r3.Reason != "invalid_completion" {
 		t.Fatalf("completing an unscheduled activity = %+v, want invalid_completion", r3)
+	}
+}
+
+// Workflow state (run record, per-run history, and activity dedup markers) must
+// survive a Raft FSM snapshot/restore — the crash-recovery / new-follower path.
+func TestSnapshotRestoreWorkflowState(t *testing.T) {
+	s1, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s1.Close()
+	f1, _ := New(s1)
+
+	sr, _ := wfApply(t, f1, 1, Command{Type: CmdWFStartRun, WFStart: &WFStartRunCmd{
+		WorkflowType: "w", TenantID: "t", NowMs: 1000,
+	}}).(*WFStartRunResult)
+	asa, _ := proto.Marshal(&rotav1.ActivityScheduledAttrs{ActivityType: "a", TenantId: "t"})
+	wfApply(t, f1, 2, Command{Type: CmdWFAppendEvents, WFAppend: &WFAppendEventsCmd{
+		RunID: sr.RunID, RunEpoch: 0, HistorySeq: 1, NowMs: 2000, Events: []WFEventIn{
+			{Type: int32(rotav1.HistoryEventType_HET_WORKFLOW_TASK_COMPLETED)},
+			{Type: int32(rotav1.HistoryEventType_HET_ACTIVITY_SCHEDULED), Attrs: asa},
+		},
+	}})
+	wfApply(t, f1, 3, Command{Type: CmdWFCompleteActivity, WFCompleteActivity: &WFCompleteActivityCmd{
+		RunID: sr.RunID, ScheduledEventID: 3, Success: true, NowMs: 3000,
+	}})
+	before := loadRun(t, s1, sr.RunID)
+
+	snap, err := f1.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := snap.Persist(&bufSink{buf: &buf}); err != nil {
+		t.Fatal(err)
+	}
+	snap.Release()
+
+	s2, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	f2, _ := New(s2)
+	if err := f2.Restore(io.NopCloser(bytes.NewReader(buf.Bytes()))); err != nil {
+		t.Fatal(err)
+	}
+
+	after := loadRun(t, s2, sr.RunID)
+	if after.CurHistorySeq != before.CurHistorySeq || after.RunEpoch != before.RunEpoch || after.Status != before.Status {
+		t.Fatalf("run did not survive snapshot: before=%+v after=%+v", before, after)
+	}
+	for id := uint64(1); id <= after.CurHistorySeq; id++ {
+		ev := &rotav1.HistoryEvent{}
+		if ok, _ := s2.GetProto(storage.WFHistoryKey(sr.RunID, id), ev); !ok {
+			t.Fatalf("history event %d lost across snapshot/restore", id)
+		}
+	}
+	if _, ok, _ := s2.GetRaw(storage.WFActivityDoneKey(sr.RunID, 3)); !ok {
+		t.Fatal("activity dedup marker lost across snapshot/restore (would re-run the activity)")
 	}
 }

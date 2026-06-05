@@ -2,9 +2,12 @@ package node
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 	"google.golang.org/protobuf/proto"
@@ -19,6 +22,64 @@ import (
 // and submits a command list to CompleteWorkflowTask — the leader-side validation
 // gate — which validates BEFORE proposing the single CmdWFAppendEvents that the FSM
 // applies under its OCC fence. Activities dispatch as ordinary fair-scheduled leases.
+
+// SignalWorkflow delivers a named signal (with an optional payload) to a running
+// run. It appends a SIGNAL_RECEIVED event and dispatches a workflow task so the
+// workflow reacts. A signal to a missing/closed run is a benign no-op.
+func (n *Node) SignalWorkflow(runID uint64, signalName string, payload []byte) error {
+	_, err := n.apply(fsm.Command{Type: fsm.CmdWFSignal, WFSignal: &fsm.WFSignalCmd{
+		RunID: runID, SignalName: signalName, Payload: payload, NowMs: nowMs(),
+	}})
+	return err
+}
+
+// CancelWorkflow terminally cancels a running run. Returns true if it was running
+// (and is now CANCELED), false if it was missing or already closed.
+func (n *Node) CancelWorkflow(runID uint64, reason []byte) (bool, error) {
+	res, err := n.apply(fsm.Command{Type: fsm.CmdWFCancel, WFCancel: &fsm.WFCancelCmd{
+		RunID: runID, Reason: reason, NowMs: nowMs(),
+	}})
+	if err != nil {
+		return false, err
+	}
+	if r, ok := res.(*fsm.WFAppendResult); ok {
+		return r.Applied, nil
+	}
+	return false, nil
+}
+
+// ListWorkflowRuns pages through workflow runs (newest-tag order = ascending run id),
+// optionally filtered by status. nextToken is "" on the last page.
+func (n *Node) ListWorkflowRuns(statusFilter rotav1.WorkflowStatus, withFilter bool, pageSize uint32, pageToken string) ([]*rotav1.WorkflowRun, string, error) {
+	lo, hi := storage.WFRunBounds()
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: pageStart(lo, pageToken), UpperBound: hi})
+	if err != nil {
+		return nil, "", err
+	}
+	defer it.Close()
+	limit := clampPage(pageSize)
+	var out []*rotav1.WorkflowRun
+	var lastKey []byte
+	for it.First(); it.Valid(); it.Next() {
+		run := &rotav1.WorkflowRun{}
+		if proto.Unmarshal(it.Value(), run) != nil {
+			continue
+		}
+		if withFilter && run.Status != statusFilter {
+			continue
+		}
+		out = append(out, run)
+		lastKey = append(lastKey[:0], it.Key()...)
+		if len(out) >= limit {
+			it.Next()
+			if it.Valid() {
+				return out, hex.EncodeToString(lastKey), nil
+			}
+			break
+		}
+	}
+	return out, "", nil
+}
 
 // StartWorkflow creates a run (RUNNING, seeded WORKFLOW_STARTED@1) and returns its id.
 func (n *Node) StartWorkflow(workflowType, tenantID string, input []byte) (uint64, error) {
@@ -76,8 +137,7 @@ func (n *Node) RunPrefixChecksum(runID, uptoSeq uint64) ([]byte, error) {
 }
 
 func historyChecksum(s *storage.Store, runID, uptoSeq uint64) ([]byte, error) {
-	h := sha256.New()
-	var buf [8]byte
+	events := make([]*rotav1.HistoryEvent, 0, uptoSeq)
 	for id := uint64(1); id <= uptoSeq; id++ {
 		ev := &rotav1.HistoryEvent{}
 		ok, err := s.GetProto(storage.WFHistoryKey(runID, id), ev)
@@ -87,13 +147,26 @@ func historyChecksum(s *storage.Store, runID, uptoSeq uint64) ([]byte, error) {
 		if !ok {
 			break
 		}
-		binary.BigEndian.PutUint64(buf[:], ev.EventId)
-		h.Write(buf[:])
-		binary.BigEndian.PutUint32(buf[:4], uint32(ev.EventType))
-		h.Write(buf[:4])
-		h.Write(ev.Attrs)
+		events = append(events, ev)
 	}
-	return h.Sum(nil), nil
+	return PrefixChecksumOf(events), nil
+}
+
+// PrefixChecksumOf computes the determinism checksum a worker echoes, from the
+// history events it replayed. The server's gate recomputes the same value over the
+// committed prefix and rejects on mismatch (a divergent replay). It hashes
+// (event_id, event_type, attrs) per event — an algorithm any SDK can reproduce.
+func PrefixChecksumOf(events []*rotav1.HistoryEvent) []byte {
+	h := sha256.New()
+	var buf [8]byte
+	for _, ev := range events {
+		binary.BigEndian.PutUint64(buf[:], ev.GetEventId())
+		h.Write(buf[:])
+		binary.BigEndian.PutUint32(buf[:4], uint32(ev.GetEventType()))
+		h.Write(buf[:4])
+		h.Write(ev.GetAttrs())
+	}
+	return h.Sum(nil)
 }
 
 // CompleteWorkflowTask is the LEADER-SIDE VALIDATION GATE. A worker that replayed
@@ -148,6 +221,9 @@ func translateCommands(cmds []WorkflowCommand, tenantID string) ([]fsm.WFEventIn
 			// Leader-stamps the absolute fire time so every node arms the same instant.
 			attrs, _ := proto.Marshal(&rotav1.TimerStartedAttrs{FireAtMs: nowMs() + c.DelayMs})
 			events = append(events, fsm.WFEventIn{Type: int32(rotav1.HistoryEventType_HET_TIMER_STARTED), Attrs: attrs})
+		case "continue_as_new":
+			attrs, _ := proto.Marshal(&rotav1.ContinueAsNewAttrs{Input: c.Input})
+			events = append(events, fsm.WFEventIn{Type: int32(rotav1.HistoryEventType_HET_WORKFLOW_CONTINUED_AS_NEW), Attrs: attrs})
 		case "complete_workflow":
 			events = append(events, fsm.WFEventIn{Type: int32(rotav1.HistoryEventType_HET_WORKFLOW_COMPLETED), Attrs: c.Result})
 		case "fail_workflow":
@@ -190,4 +266,84 @@ func (n *Node) proposeAppend(runID uint64, epoch uint32, seq uint64, events []fs
 		return r, nil
 	}
 	return nil, fmt.Errorf("append: no result")
+}
+
+// ─── Worker loops (the engine drivers) ──────────────────────────────────────────
+
+// WorkflowDecider replays a run's committed history and returns the commands for
+// the current decision. It MUST be deterministic in history (idempotent on replay):
+// given the same history it returns the same commands, emitting NEW commands only at
+// the current decision point. Returning nil means "no new work — wait".
+type WorkflowDecider func(runID uint64, history []*rotav1.HistoryEvent) []WorkflowCommand
+
+// ActivityHandler executes an activity and returns (result, success).
+type ActivityHandler func(task *rotav1.ActivityTask) (result []byte, success bool)
+
+// RunWorkflowWorker polls workflow tasks for a workflow type and drives decisions
+// through the leader validation gate until ctx is cancelled. Leader-only in effect
+// (LeaseOne only yields on the leader); a follower simply leases nothing and idles.
+func (n *Node) RunWorkflowWorker(ctx context.Context, workflowType, consumerID string, decide WorkflowDecider) {
+	lane := fsm.WorkflowLanePrefix + workflowType
+	for ctx.Err() == nil {
+		lr, ok, err := n.LeaseOne(lane, consumerID)
+		if err != nil || !ok {
+			sleepCtx(ctx, 15*time.Millisecond)
+			continue
+		}
+		n.driveWorkflowTask(lr, decide)
+		_ = n.Ack(lr.LeaseID)
+	}
+}
+
+// driveWorkflowTask handles one leased workflow task: load the run, replay history,
+// decide, and submit through the gate (which validates OCC + prefix checksum). A
+// stale or closed-run task is a harmless no-op — a fresh task already covers the new
+// state — so it is simply acked by the caller.
+func (n *Node) driveWorkflowTask(lr *fsm.LeaseResult, decide WorkflowDecider) {
+	ref := &rotav1.WorkflowTaskRef{}
+	if proto.Unmarshal(lr.Payload, ref) != nil {
+		return
+	}
+	run, found := n.GetRun(ref.RunId)
+	if !found || run.Status != rotav1.WorkflowStatus_WF_RUNNING {
+		return
+	}
+	history, err := n.GetRunHistory(ref.RunId)
+	if err != nil {
+		return
+	}
+	cmds := decide(ref.RunId, history)
+	cs, err := n.RunPrefixChecksum(ref.RunId, run.CurHistorySeq)
+	if err != nil {
+		return
+	}
+	_, _ = n.CompleteWorkflowTask(ref.RunId, run.RunEpoch, run.CurHistorySeq, cs, cmds)
+}
+
+// RunActivityWorker polls activity tasks for an activity type, runs the handler, and
+// records the result (idempotently, by scheduled_event_id) until ctx is cancelled.
+func (n *Node) RunActivityWorker(ctx context.Context, activityType, consumerID string, handle ActivityHandler) {
+	lane := fsm.ActivityLanePrefix + activityType
+	for ctx.Err() == nil {
+		lr, ok, err := n.LeaseOne(lane, consumerID)
+		if err != nil || !ok {
+			sleepCtx(ctx, 15*time.Millisecond)
+			continue
+		}
+		task := &rotav1.ActivityTask{}
+		if proto.Unmarshal(lr.Payload, task) == nil && task.GetRunId() != 0 {
+			result, success := handle(task)
+			_, _ = n.CompleteActivityTask(task.GetRunId(), task.GetScheduledEventId(), success, result)
+		}
+		_ = n.Ack(lr.LeaseID)
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }

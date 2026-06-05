@@ -104,6 +104,10 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyWFAppendEvents(b, cmd.WFAppend)
 	case CmdWFCompleteActivity:
 		res, err = f.applyWFCompleteActivity(b, cmd.WFCompleteActivity)
+	case CmdWFSignal:
+		res, err = f.applyWFSignal(b, cmd.WFSignal)
+	case CmdWFCancel:
+		res, err = f.applyWFCancel(b, cmd.WFCancel)
 	default:
 		// Unknown CmdType: this binary is older than the command set already
 		// committed to the log (a mixed-version rollout, or a downgrade). The old

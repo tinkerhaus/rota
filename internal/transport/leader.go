@@ -67,6 +67,13 @@ var mutatingMethods = map[string]bool{
 	"/rota.v1.Control/PauseLane":             true,
 	"/rota.v1.Control/ResumeLane":            true,
 	"/rota.v1.Control/RedriveDeadLetter":     true,
+	"/rota.v1.Workflow/StartWorkflow":        true,
+	"/rota.v1.Workflow/SignalWorkflow":       true,
+	"/rota.v1.Workflow/CancelWorkflow":       true,
+	"/rota.v1.Workflow/PollWorkflowTask":     true,
+	"/rota.v1.Workflow/RespondWorkflowTask":  true,
+	"/rota.v1.Workflow/PollActivityTask":     true,
+	"/rota.v1.Workflow/RespondActivityTask":  true,
 }
 
 // LeaderGuardInterceptor redirects mutating unary RPCs to the leader (NOT_LEADER

@@ -18,7 +18,7 @@ import (
 // frontend build) to prove the Go path never depends on web/dist content.
 func startGateway(t *testing.T, n *node.Node) *httptest.Server {
 	t.Helper()
-	h := httpapi.Handler(n, transport.NewControl(n), t.TempDir())
+	h := httpapi.Handler(n, transport.NewControl(n), transport.NewWorkflow(n), t.TempDir())
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv

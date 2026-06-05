@@ -738,6 +738,15 @@ message WorkflowRun {
   uint64 started_ms = 8;
   uint64 last_event_ms = 9;
   uint64 parent_run_id = 10;           // 0 for a root run
+  bool wf_task_pending = 11;           // a workflow task is dispatched & not yet completed (dedup)
+}
+
+// WorkflowTaskRef is the payload of a dispatched workflow-task message on
+// __wf/<type> (group = run_id). A worker leases it, fetches the run's history,
+// replays, decides, and completes the workflow task.
+message WorkflowTaskRef {
+  uint64 run_id = 1;
+  string workflow_type = 2;
 }
 
 // Activity dispatch (Phase 8). An ACTIVITY_SCHEDULED history event carries these
@@ -771,4 +780,118 @@ message TimerStartedAttrs {
 }
 message TimerFiredAttrs {
   uint64 started_event_id = 1;
+}
+
+// Signal delivery: SIGNAL_RECEIVED is appended to a running run (an external event)
+// and dispatches a workflow task so the workflow code can react to it on replay.
+message SignalReceivedAttrs {
+  string signal_name = 1;
+  bytes payload = 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+// the read RPCs are follower-servable.
+// ─────────────────────────────────────────────────────────────────────────────
+service Workflow {
+  rpc StartWorkflow(StartWorkflowRequest) returns (StartWorkflowResponse);
+  rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
+  rpc GetWorkflowRun(WorkflowRunRef) returns (WorkflowRun);
+  rpc GetWorkflowHistory(WorkflowRunRef) returns (GetWorkflowHistoryResponse);
+  rpc ListWorkflowRuns(ListWorkflowRunsRequest) returns (ListWorkflowRunsResponse);
+
+  // Worker protocol (language-agnostic; an SDK in any language drives the engine).
+  // Poll leases a task; Respond submits the result and acks the lease. Leader-guarded.
+  rpc PollWorkflowTask(PollTaskRequest) returns (PolledWorkflowTask);
+  rpc RespondWorkflowTask(RespondWorkflowTaskRequest) returns (RespondWorkflowTaskResponse);
+  rpc PollActivityTask(PollTaskRequest) returns (PolledActivityTask);
+  rpc RespondActivityTask(RespondActivityTaskRequest) returns (RespondActivityTaskResponse);
+}
+
+message PollTaskRequest {
+  string task_type = 1;     // workflow type or activity type
+  string consumer_id = 2;
+}
+// PolledWorkflowTask carries the run's full history so the worker replays + decides.
+// empty=true means no task was available.
+message PolledWorkflowTask {
+  bool empty = 1;
+  uint64 run_id = 2;
+  uint64 lease_id = 3;
+  uint32 run_epoch = 4;
+  uint64 history_seq = 5;
+  repeated HistoryEvent history = 6;
+}
+message WorkflowCommandProto {
+  string kind = 1;          // schedule_activity | start_timer | continue_as_new | complete_workflow | fail_workflow
+  string activity_type = 2;
+  bytes input = 3;
+  bytes result = 4;
+  uint64 delay_ms = 5;
+}
+message RespondWorkflowTaskRequest {
+  uint64 run_id = 1;
+  uint64 lease_id = 2;
+  uint32 run_epoch = 3;
+  uint64 history_seq = 4;
+  bytes prefix_checksum = 5;
+  repeated WorkflowCommandProto commands = 6;
+}
+message RespondWorkflowTaskResponse {
+  bool applied = 1;
+  string reason = 2;        // "" | stale | non_determinism | closed | checksum_required
+}
+message PolledActivityTask {
+  bool empty = 1;
+  uint64 run_id = 2;
+  uint64 lease_id = 3;
+  uint64 scheduled_event_id = 4;
+  string activity_type = 5;
+  bytes input = 6;
+}
+message RespondActivityTaskRequest {
+  uint64 run_id = 1;
+  uint64 lease_id = 2;
+  uint64 scheduled_event_id = 3;
+  bool success = 4;
+  bytes result = 5;
+}
+message RespondActivityTaskResponse {}
+
+message StartWorkflowRequest {
+  string workflow_type = 1;
+  string tenant_id = 2;
+  bytes input = 3;
+}
+message StartWorkflowResponse { uint64 run_id = 1; }
+message SignalWorkflowRequest {
+  uint64 run_id = 1;
+  string signal_name = 2;
+  bytes payload = 3;
+}
+message SignalWorkflowResponse {}
+message CancelWorkflowRequest {
+  uint64 run_id = 1;
+  bytes reason = 2;
+}
+message CancelWorkflowResponse { bool canceled = 1; }
+message WorkflowRunRef { uint64 run_id = 1; }
+message GetWorkflowHistoryResponse { repeated HistoryEvent events = 1; }
+message ListWorkflowRunsRequest {
+  WorkflowStatus status = 1;       // filter (only applied when has_status)
+  bool has_status = 2;
+  uint32 page_size = 3;
+  string page_token = 4;
+}
+message ListWorkflowRunsResponse {
+  repeated WorkflowRun runs = 1;
+  string next_page_token = 2;
+}
+
+// Continue-as-new closes a run (status CONTINUED) and atomically starts a successor
+// with this carried input and a FRESH, empty history — bounding per-run history for
+// long-running / looping workflows.
+message ContinueAsNewAttrs {
+  bytes input = 1;
 }

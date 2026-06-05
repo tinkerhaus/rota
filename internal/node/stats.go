@@ -204,6 +204,8 @@ type LaneStat struct {
 	GroupCount    uint64
 	DLQ           uint64
 	PolicyVersion uint64
+	PublishRate   float64 // smoothed events/sec (leader-local meter)
+	LeaseRate     float64
 }
 
 // Stats aggregates per-lane depth from group metadata (optionally filtered).
@@ -241,6 +243,8 @@ func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
 		n.polMu.Lock()
 		s.PolicyVersion = n.loadedPolVer[lane]
 		n.polMu.Unlock()
+		r := n.meter.rates(lane)
+		s.PublishRate, s.LeaseRate = r.Publish, r.Lease
 		out = append(out, *s)
 	}
 	return out, nil

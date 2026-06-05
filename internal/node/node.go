@@ -76,6 +76,10 @@ type Node struct {
 	// fairness is the leader-only in-memory served-order/served-count projection
 	// that powers the Fairness Observatory (GetLaneFairness + the SSE stream).
 	fairness *fairnessProjection
+
+	// meter is the leader-local per-lane EWMA publish/lease rate meter that powers
+	// the dashboard throughput sparklines.
+	meter *laneMeter
 }
 
 type PublishReq struct {
@@ -160,9 +164,11 @@ func Open(cfg Config) (*Node, error) {
 		cancel: cancel, loadedPolVer: map[string]uint64{},
 		limiters: map[string]*rate.Limiter{}, loadedLaneCfg: map[string]fsm.LaneConfigRec{},
 		paused: map[string]int64{}, fairness: newFairnessProjection(),
+		meter: newLaneMeter(),
 	}
 	go n.chronosLoop(ctx)
 	go n.reapLoop(ctx)
+	go n.meterLoop(ctx)
 	return n, nil
 }
 
@@ -287,6 +293,7 @@ func (n *Node) Publish(r PublishReq) (uint64, error) {
 	}
 	if !pr.Duplicate {
 		observe.Publishes.Inc() // a dedup hit enqueued nothing
+		n.meter.incPublish(r.Lane)
 	}
 	return pr.MsgID, nil
 }
@@ -356,6 +363,7 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 		return nil, false, nil
 	}
 	observe.Leases.Inc()
+	n.meter.incLease(lane)
 	// Leader-only fairness projection: record the served (lane,group) in order so
 	// the Observatory can render the recent service ribbon and rolling shares.
 	// Cheap (one append + one map bump under a small mutex); never blocks leasing.

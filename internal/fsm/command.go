@@ -27,6 +27,8 @@ const (
 	CmdWFStartRun
 	CmdWFAppendEvents
 	CmdWFCompleteActivity
+	CmdWFSignal
+	CmdWFCancel
 )
 
 type GroupOp uint8
@@ -89,6 +91,25 @@ type Command struct {
 	WFStart            *WFStartRunCmd         `json:"wfs,omitempty"`
 	WFAppend           *WFAppendEventsCmd     `json:"wfa,omitempty"`
 	WFCompleteActivity *WFCompleteActivityCmd `json:"wfca,omitempty"`
+	WFSignal           *WFSignalCmd           `json:"wfsig,omitempty"`
+	WFCancel           *WFCancelCmd           `json:"wfcan,omitempty"`
+}
+
+// WFCancelCmd terminally cancels a running run: it appends WORKFLOW_CANCELED and
+// closes the run. Idempotent — a missing/already-closed run is a no-op.
+type WFCancelCmd struct {
+	RunID  uint64 `json:"rid"`
+	Reason []byte `json:"r,omitempty"`
+	NowMs  uint64 `json:"now"`
+}
+
+// WFSignalCmd delivers a signal to a running run: it appends a SIGNAL_RECEIVED
+// external event and dispatches a workflow task so the workflow reacts.
+type WFSignalCmd struct {
+	RunID      uint64 `json:"rid"`
+	SignalName string `json:"sn"`
+	Payload    []byte `json:"pl,omitempty"`
+	NowMs      uint64 `json:"now"`
 }
 
 // ─── Durable execution (Phase 8) ────────────────────────────────────────────────

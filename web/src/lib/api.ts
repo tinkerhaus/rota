@@ -207,6 +207,75 @@ export interface PolicyValidation {
   message?: string;
 }
 
+// ── Workflows (durable execution, Phase 8) ───────────────────────────────────
+//
+// protojson emits WorkflowStatus / HistoryEventType enums as their NAME strings
+// ("WF_RUNNING", "HET_ACTIVITY_SCHEDULED") and all uint64 fields as decimal
+// strings. `input`/`attrs`/`payload` bytes arrive base64-encoded.
+
+export type WorkflowStatus =
+  | 'WF_PENDING'
+  | 'WF_RUNNING'
+  | 'WF_COMPLETED'
+  | 'WF_FAILED'
+  | 'WF_CANCELED'
+  | 'WF_CONTINUED';
+
+export type HistoryEventType =
+  | 'HET_UNSPECIFIED'
+  | 'HET_WORKFLOW_STARTED'
+  | 'HET_WORKFLOW_TASK_SCHEDULED'
+  | 'HET_WORKFLOW_TASK_COMPLETED'
+  | 'HET_ACTIVITY_SCHEDULED'
+  | 'HET_ACTIVITY_COMPLETED'
+  | 'HET_ACTIVITY_FAILED'
+  | 'HET_TIMER_STARTED'
+  | 'HET_TIMER_FIRED'
+  | 'HET_SIGNAL_RECEIVED'
+  | 'HET_MARKER_RECORDED'
+  | 'HET_WORKFLOW_COMPLETED'
+  | 'HET_WORKFLOW_FAILED'
+  | 'HET_WORKFLOW_CANCELED'
+  | 'HET_WORKFLOW_CONTINUED_AS_NEW';
+
+export interface WorkflowRun {
+  runId?: string | number;
+  workflowType?: string;
+  tenantId?: string;
+  status?: WorkflowStatus | string;
+  runEpoch?: number;
+  curHistorySeq?: string | number;
+  input?: string; // base64
+  startedMs?: string | number;
+  lastEventMs?: string | number;
+  parentRunId?: string | number;
+  wfTaskPending?: boolean;
+}
+
+export interface ListWorkflowRunsResponse {
+  runs?: WorkflowRun[];
+  nextPageToken?: string;
+}
+
+export interface HistoryEvent {
+  eventId?: string | number;
+  eventType?: HistoryEventType | string;
+  eventTimeMs?: string | number;
+  attrs?: string; // base64
+}
+
+export interface GetWorkflowHistoryResponse {
+  events?: HistoryEvent[];
+}
+
+export interface StartWorkflowResponse {
+  runId?: string | number;
+}
+
+export interface CancelWorkflowResponse {
+  canceled?: boolean;
+}
+
 // ── Endpoints ────────────────────────────────────────────────────────────────
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -267,5 +336,34 @@ export const api = {
     req<PolicyValidation>(`/api/lanes/${enc(lane)}/policy/validate`, {
       method: 'POST',
       body: JSON.stringify({ source, engine })
+    }),
+
+  // ── Workflows (durable execution) ──
+  workflows: (opts: { status?: string; pageToken?: string; pageSize?: number } = {}) =>
+    req<ListWorkflowRunsResponse>(
+      `/api/workflows${qs({ status: opts.status, page_token: opts.pageToken, page_size: opts.pageSize })}`
+    ),
+
+  startWorkflow: (body: { workflowType: string; tenantId: string; input: string }) =>
+    req<StartWorkflowResponse>('/api/workflows', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+
+  workflowRun: (id: string | number) => req<WorkflowRun>(`/api/workflows/${enc(String(id))}`),
+
+  workflowHistory: (id: string | number) =>
+    req<GetWorkflowHistoryResponse>(`/api/workflows/${enc(String(id))}/history`),
+
+  signalWorkflow: (id: string | number, body: { signalName: string; payload: string }) =>
+    req<Record<string, never>>(`/api/workflows/${enc(String(id))}/signal`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+
+  cancelWorkflow: (id: string | number, reason: string) =>
+    req<CancelWorkflowResponse>(`/api/workflows/${enc(String(id))}/cancel${qs({ reason })}`, {
+      method: 'POST',
+      body: '{}'
     })
 };

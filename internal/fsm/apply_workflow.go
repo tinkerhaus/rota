@@ -1,6 +1,8 @@
 package fsm
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/pebble"
 	"google.golang.org/protobuf/proto"
 
@@ -12,6 +14,35 @@ import (
 // An activity of type T dispatches onto lane "__act/T", group = tenant, so the
 // existing fair scheduler interleaves activities per tenant just like any message.
 const ActivityLanePrefix = "__act/"
+
+// WorkflowLanePrefix is the lane namespace for workflow-task dispatch. A run's
+// task goes to "__wf/<type>", group = run_id (a string), so the broker's per-group
+// head-of-line rule gives "at most one workflow task in flight per run" for free.
+const WorkflowLanePrefix = "__wf/"
+
+// runGroup is the group id a run's workflow tasks use (its decimal run id).
+func runGroup(runID uint64) string { return strconv.FormatUint(runID, 10) }
+
+// dispatchWorkflowTask publishes a workflow-task message for a run that needs a
+// decision, unless one is already pending (the wf_task_pending dedup flag). It
+// MUTATES run.WfTaskPending; the CALLER persists run. Idempotent across the many
+// trigger points (start, activity terminal, timer fired) by the flag.
+func (f *FSM) dispatchWorkflowTask(b *pebble.Batch, run *rotav1.WorkflowRun) error {
+	if run.Status != rotav1.WorkflowStatus_WF_RUNNING || run.WfTaskPending {
+		return nil
+	}
+	ref := &rotav1.WorkflowTaskRef{RunId: run.RunId, WorkflowType: run.WorkflowType}
+	payload, err := proto.Marshal(ref)
+	if err != nil {
+		return err
+	}
+	lane := WorkflowLanePrefix + run.WorkflowType
+	if _, err := f.publishReady(b, lane, runGroup(run.RunId), payload, nil, run.LastEventMs); err != nil {
+		return err
+	}
+	run.WfTaskPending = true
+	return nil
+}
 
 // Durable-execution kernel (Phase 8). The engine's system of record is a per-run,
 // append-only, totally-ordered event HISTORY plus a RunMeta record, both written in
@@ -29,27 +60,37 @@ func (f *FSM) nextRunID(b *pebble.Batch) uint64 {
 	return id
 }
 
-// applyWFStartRun creates a run: assigns the run id, writes RunMeta RUNNING, and
-// seeds the history with a WORKFLOW_STARTED event at event_id 1. Deterministic —
-// the leader stamps NowMs and every node applies the identical committed outcome.
-func (f *FSM) applyWFStartRun(b *pebble.Batch, c *WFStartRunCmd) (interface{}, error) {
+// createRun assigns a run id, writes RunMeta RUNNING, seeds WORKFLOW_STARTED@1, and
+// dispatches the initial workflow task — all in b. Used by StartWorkflow and by
+// continue-as-new (which passes the predecessor as parent). Deterministic.
+func (f *FSM) createRun(b *pebble.Batch, workflowType, tenant string, input []byte, parentRunID, nowMs uint64) (uint64, error) {
 	runID := f.nextRunID(b)
 	run := &rotav1.WorkflowRun{
-		RunId: runID, WorkflowType: c.WorkflowType, TenantId: c.TenantID,
+		RunId: runID, WorkflowType: workflowType, TenantId: tenant,
 		Status: rotav1.WorkflowStatus_WF_RUNNING, RunEpoch: 0,
-		Input: c.Input, StartedMs: c.NowMs, LastEventMs: c.NowMs, ParentRunId: c.ParentRunID,
+		Input: input, StartedMs: nowMs, LastEventMs: nowMs, ParentRunId: parentRunID,
 	}
 	started := &rotav1.HistoryEvent{
-		EventId:     1,
-		EventType:   rotav1.HistoryEventType_HET_WORKFLOW_STARTED,
-		EventTimeMs: c.NowMs,
-		Attrs:       c.Input,
+		EventId: 1, EventType: rotav1.HistoryEventType_HET_WORKFLOW_STARTED,
+		EventTimeMs: nowMs, Attrs: input,
 	}
 	if err := putProto(b, storage.WFHistoryKey(runID, 1), started); err != nil {
-		return nil, err
+		return 0, err
 	}
 	run.CurHistorySeq = 1
+	if err := f.dispatchWorkflowTask(b, run); err != nil {
+		return 0, err
+	}
 	if err := putProto(b, storage.WFRunKey(runID), run); err != nil {
+		return 0, err
+	}
+	return runID, nil
+}
+
+// applyWFStartRun creates a root run (no parent).
+func (f *FSM) applyWFStartRun(b *pebble.Batch, c *WFStartRunCmd) (interface{}, error) {
+	runID, err := f.createRun(b, c.WorkflowType, c.TenantID, c.Input, c.ParentRunID, c.NowMs)
+	if err != nil {
 		return nil, err
 	}
 	return &WFStartRunResult{RunID: runID}, nil
@@ -109,11 +150,19 @@ func (f *FSM) applyWFAppendEvents(b *pebble.Batch, c *WFAppendEventsCmd) (interf
 			run.Status = rotav1.WorkflowStatus_WF_CANCELED
 		case rotav1.HistoryEventType_HET_WORKFLOW_CONTINUED_AS_NEW:
 			run.Status = rotav1.WorkflowStatus_WF_CONTINUED
+			// Atomically start the successor (carried input, fresh history) so a
+			// long/looping workflow's per-run history stays bounded.
+			can := &rotav1.ContinueAsNewAttrs{}
+			_ = proto.Unmarshal(ev.Attrs, can)
+			if _, err := f.createRun(b, run.WorkflowType, run.TenantId, can.GetInput(), run.RunId, c.NowMs); err != nil {
+				return nil, err
+			}
 		}
 	}
 	run.CurHistorySeq = next
 	run.RunEpoch++ // every committed append advances the OCC generation
 	run.LastEventMs = c.NowMs
+	run.WfTaskPending = false // this append IS the workflow task's completion
 	if err := putProto(b, storage.WFRunKey(c.RunID), run); err != nil {
 		return nil, err
 	}
@@ -177,6 +226,13 @@ func (f *FSM) recordActivityTerminal(b *pebble.Batch, runID, schedEventID uint64
 	run.CurHistorySeq = seq
 	run.RunEpoch++
 	run.LastEventMs = nowMs
+	// An external event advanced the run, superseding any in-flight task (whose
+	// completion will now stale-reject). Force a fresh task against the new state so
+	// the run can never wedge waiting on a task it already invalidated.
+	run.WfTaskPending = false
+	if err := f.dispatchWorkflowTask(b, run); err != nil {
+		return false, "", 0, err
+	}
 	if err := putProto(b, storage.WFRunKey(runID), run); err != nil {
 		return false, "", 0, err
 	}
@@ -194,10 +250,12 @@ func (f *FSM) armWFTimer(b *pebble.Batch, runID, startedEventID uint64, attrs []
 	return addTimer(b, tsa.GetFireAtMs(), storage.TimerWFFired, storage.WFTimerRef(runID, startedEventID), 0)
 }
 
-// recordTimerFired appends a TIMER_FIRED event to a run when its durable timer
-// fires. Idempotency comes from the firing tidx row being consumed exactly once
-// (applyFireTimer deletes it), so a re-proposed fire after failover is a no-op.
-func (f *FSM) recordTimerFired(b *pebble.Batch, runID, startedEventID, nowMs uint64) error {
+// appendExternalEvent appends a leader-authored external event (timer fired, signal
+// received, …) to a running run and dispatches a fresh workflow task so the run
+// reacts to it. External events have no worker decision to validate; the caller's
+// own once-only guard (the tidx row for timers, the API call for signals) provides
+// any needed idempotency. On a missing/closed run it is a no-op.
+func (f *FSM) appendExternalEvent(b *pebble.Batch, runID uint64, typ rotav1.HistoryEventType, attrs []byte, nowMs uint64) error {
 	run := &rotav1.WorkflowRun{}
 	if ok, _ := f.s.GetProto(storage.WFRunKey(runID), run); !ok {
 		return nil
@@ -206,18 +264,65 @@ func (f *FSM) recordTimerFired(b *pebble.Batch, runID, startedEventID, nowMs uin
 		return nil
 	}
 	seq := run.CurHistorySeq + 1
-	attrs, _ := proto.Marshal(&rotav1.TimerFiredAttrs{StartedEventId: startedEventID})
-	ev := &rotav1.HistoryEvent{
-		EventId: seq, EventType: rotav1.HistoryEventType_HET_TIMER_FIRED,
-		EventTimeMs: nowMs, Attrs: attrs,
-	}
+	ev := &rotav1.HistoryEvent{EventId: seq, EventType: typ, EventTimeMs: nowMs, Attrs: attrs}
 	if err := putProto(b, storage.WFHistoryKey(runID, seq), ev); err != nil {
 		return err
 	}
 	run.CurHistorySeq = seq
 	run.RunEpoch++
 	run.LastEventMs = nowMs
+	// Supersede any in-flight task and dispatch a fresh one against the new state
+	// (see recordActivityTerminal for why this can't wedge).
+	run.WfTaskPending = false
+	if err := f.dispatchWorkflowTask(b, run); err != nil {
+		return err
+	}
 	return putProto(b, storage.WFRunKey(runID), run)
+}
+
+// recordTimerFired appends a TIMER_FIRED event when a durable timer fires. The
+// firing tidx row (consumed exactly once by applyFireTimer) is the idempotency guard.
+func (f *FSM) recordTimerFired(b *pebble.Batch, runID, startedEventID, nowMs uint64) error {
+	attrs, _ := proto.Marshal(&rotav1.TimerFiredAttrs{StartedEventId: startedEventID})
+	return f.appendExternalEvent(b, runID, rotav1.HistoryEventType_HET_TIMER_FIRED, attrs, nowMs)
+}
+
+// applyWFCancel terminally cancels a running run (appends WORKFLOW_CANCELED, status
+// CANCELED). No new task is dispatched. Idempotent on a missing/closed run.
+func (f *FSM) applyWFCancel(b *pebble.Batch, c *WFCancelCmd) (interface{}, error) {
+	run := &rotav1.WorkflowRun{}
+	if ok, _ := f.s.GetProto(storage.WFRunKey(c.RunID), run); !ok {
+		return &WFAppendResult{Applied: false, Reason: "missing"}, nil
+	}
+	if run.Status != rotav1.WorkflowStatus_WF_RUNNING {
+		return &WFAppendResult{Applied: false, Reason: "closed"}, nil
+	}
+	seq := run.CurHistorySeq + 1
+	ev := &rotav1.HistoryEvent{
+		EventId: seq, EventType: rotav1.HistoryEventType_HET_WORKFLOW_CANCELED,
+		EventTimeMs: c.NowMs, Attrs: c.Reason,
+	}
+	if err := putProto(b, storage.WFHistoryKey(c.RunID, seq), ev); err != nil {
+		return nil, err
+	}
+	run.CurHistorySeq = seq
+	run.RunEpoch++
+	run.Status = rotav1.WorkflowStatus_WF_CANCELED
+	run.LastEventMs = c.NowMs
+	run.WfTaskPending = false
+	if err := putProto(b, storage.WFRunKey(c.RunID), run); err != nil {
+		return nil, err
+	}
+	return &WFAppendResult{Applied: true, NewSeq: seq}, nil
+}
+
+// applyWFSignal appends a SIGNAL_RECEIVED event and dispatches a workflow task.
+func (f *FSM) applyWFSignal(b *pebble.Batch, c *WFSignalCmd) (interface{}, error) {
+	attrs, _ := proto.Marshal(&rotav1.SignalReceivedAttrs{SignalName: c.SignalName, Payload: c.Payload})
+	if err := f.appendExternalEvent(b, c.RunID, rotav1.HistoryEventType_HET_SIGNAL_RECEIVED, attrs, c.NowMs); err != nil {
+		return nil, err
+	}
+	return &WFAppendResult{Applied: true}, nil
 }
 
 // dispatchActivity publishes the activity task message for an ACTIVITY_SCHEDULED

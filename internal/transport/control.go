@@ -249,15 +249,13 @@ func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsReque
 	}
 	resp := &rotav1.StatsResponse{}
 	for _, s := range stats {
-		// NOTE: this is a point-in-time depth aggregate over group metadata. The
-		// EWMA rate fields (publish_rate/lease_rate/ack_rate) and oldest_age_ms are
-		// deliberately left zero here — a rate needs time-series sampling, which is
-		// owned by the leader's in-memory fairness projection (Phase 7), not this
-		// stateless snapshot RPC. They are surfaced over the dashboard SSE stream,
-		// not GetStats. Do not read them as "no activity".
+		// publish_rate/lease_rate are smoothed (EWMA) events/sec from the leader's
+		// per-lane meter; depths are a point-in-time aggregate over group metadata.
+		// ack_rate/oldest_age_ms remain 0 (not yet metered).
 		resp.Lanes = append(resp.Lanes, &rotav1.LaneStats{
 			Lane: s.Lane, Leasable: s.Leasable, Delayed: s.Delayed, Inflight: s.Inflight,
 			DlqDepth: s.DLQ, GroupCount: s.GroupCount, PolicyVersion: s.PolicyVersion,
+			PublishRate: s.PublishRate, LeaseRate: s.LeaseRate,
 		})
 	}
 	return resp, nil

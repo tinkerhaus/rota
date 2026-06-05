@@ -106,6 +106,8 @@ func cmdServe(args []string) error {
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))
 	control := transport.NewControl(n)
 	rotav1.RegisterControlServer(srv, control)
+	wf := transport.NewWorkflow(n)
+	rotav1.RegisterWorkflowServer(srv, wf)
 
 	// Standard gRPC health + server reflection: let grpcurl/k8s probes and the
 	// dashboard discover and health-check the services without out-of-band specs.
@@ -129,7 +131,7 @@ func cmdServe(args []string) error {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	mux.Handle("/", httpapi.Handler(n, control, webDir))
+	mux.Handle("/", httpapi.Handler(n, control, wf, webDir))
 	metricsSrv := &http.Server{Addr: metricsAddr, Handler: mux}
 	go func() { _ = metricsSrv.ListenAndServe() }()
 

@@ -339,6 +339,41 @@ class ControlStub:
                 request_serializer=rota_dot_v1_dot_rota__pb2.HealthRequest.SerializeToString,
                 response_deserializer=rota_dot_v1_dot_rota__pb2.HealthResponse.FromString,
                 _registered_method=True)
+        self.ListGroups = channel.unary_unary(
+                '/rota.v1.Control/ListGroups',
+                request_serializer=rota_dot_v1_dot_rota__pb2.ListGroupsRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.ListGroupsResponse.FromString,
+                _registered_method=True)
+        self.ListDeadLetters = channel.unary_unary(
+                '/rota.v1.Control/ListDeadLetters',
+                request_serializer=rota_dot_v1_dot_rota__pb2.ListDeadLettersRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.ListDeadLettersResponse.FromString,
+                _registered_method=True)
+        self.ListLeases = channel.unary_unary(
+                '/rota.v1.Control/ListLeases',
+                request_serializer=rota_dot_v1_dot_rota__pb2.ListLeasesRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.ListLeasesResponse.FromString,
+                _registered_method=True)
+        self.PeekMessages = channel.unary_unary(
+                '/rota.v1.Control/PeekMessages',
+                request_serializer=rota_dot_v1_dot_rota__pb2.PeekMessagesRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.PeekMessagesResponse.FromString,
+                _registered_method=True)
+        self.GetLaneFairness = channel.unary_unary(
+                '/rota.v1.Control/GetLaneFairness',
+                request_serializer=rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.LaneFairness.FromString,
+                _registered_method=True)
+        self.GetPolicyHealth = channel.unary_unary(
+                '/rota.v1.Control/GetPolicyHealth',
+                request_serializer=rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.PolicyHealth.FromString,
+                _registered_method=True)
+        self.RedriveDeadLetter = channel.unary_unary(
+                '/rota.v1.Control/RedriveDeadLetter',
+                request_serializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.FromString,
+                _registered_method=True)
 
 
 class ControlServicer:
@@ -511,6 +546,59 @@ class ControlServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListGroups(self, request, context):
+        """Read-only introspection for the operator dashboard. Paginated; follower-servable
+        (NOT in the leader-guard set) so reads scale off any node's local replica.
+        per-group fairness grid
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListDeadLetters(self, request, context):
+        """DLQ inspector
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListLeases(self, request, context):
+        """in-flight lease inspector
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PeekMessages(self, request, context):
+        """non-destructive group head read
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetLaneFairness(self, request, context):
+        """Fairness Observatory (read-only; leader holds the in-memory projection, but
+        both are follower-servable — a follower simply reports its own local view).
+        per-group fairness snapshot
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetPolicyHealth(self, request, context):
+        """policy version / quarantine / fault state
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RedriveDeadLetter(self, request, context):
+        """Operator action: re-publish a dead letter onto its lane (mutating; leader-guarded).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -638,6 +726,41 @@ def add_ControlServicer_to_server(servicer, server):
                     servicer.Health,
                     request_deserializer=rota_dot_v1_dot_rota__pb2.HealthRequest.FromString,
                     response_serializer=rota_dot_v1_dot_rota__pb2.HealthResponse.SerializeToString,
+            ),
+            'ListGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListGroups,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.ListGroupsRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.ListGroupsResponse.SerializeToString,
+            ),
+            'ListDeadLetters': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDeadLetters,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.ListDeadLettersRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.ListDeadLettersResponse.SerializeToString,
+            ),
+            'ListLeases': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListLeases,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.ListLeasesRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.ListLeasesResponse.SerializeToString,
+            ),
+            'PeekMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.PeekMessages,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.PeekMessagesRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.PeekMessagesResponse.SerializeToString,
+            ),
+            'GetLaneFairness': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetLaneFairness,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.LaneRef.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.LaneFairness.SerializeToString,
+            ),
+            'GetPolicyHealth': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPolicyHealth,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.LaneRef.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.PolicyHealth.SerializeToString,
+            ),
+            'RedriveDeadLetter': grpc.unary_unary_rpc_method_handler(
+                    servicer.RedriveDeadLetter,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1317,6 +1440,668 @@ class Control:
             '/rota.v1.Control/Health',
             rota_dot_v1_dot_rota__pb2.HealthRequest.SerializeToString,
             rota_dot_v1_dot_rota__pb2.HealthResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/ListGroups',
+            rota_dot_v1_dot_rota__pb2.ListGroupsRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.ListGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDeadLetters(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/ListDeadLetters',
+            rota_dot_v1_dot_rota__pb2.ListDeadLettersRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.ListDeadLettersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListLeases(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/ListLeases',
+            rota_dot_v1_dot_rota__pb2.ListLeasesRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.ListLeasesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PeekMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/PeekMessages',
+            rota_dot_v1_dot_rota__pb2.PeekMessagesRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.PeekMessagesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetLaneFairness(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/GetLaneFairness',
+            rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.LaneFairness.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPolicyHealth(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/GetPolicyHealth',
+            rota_dot_v1_dot_rota__pb2.LaneRef.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.PolicyHealth.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RedriveDeadLetter(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/RedriveDeadLetter',
+            rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class WorkflowStub:
+    """─────────────────────────────────────────────────────────────────────────────
+    Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+    the read RPCs are follower-servable.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.StartWorkflow = channel.unary_unary(
+                '/rota.v1.Workflow/StartWorkflow',
+                request_serializer=rota_dot_v1_dot_rota__pb2.StartWorkflowRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.StartWorkflowResponse.FromString,
+                _registered_method=True)
+        self.SignalWorkflow = channel.unary_unary(
+                '/rota.v1.Workflow/SignalWorkflow',
+                request_serializer=rota_dot_v1_dot_rota__pb2.SignalWorkflowRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.SignalWorkflowResponse.FromString,
+                _registered_method=True)
+        self.CancelWorkflow = channel.unary_unary(
+                '/rota.v1.Workflow/CancelWorkflow',
+                request_serializer=rota_dot_v1_dot_rota__pb2.CancelWorkflowRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.CancelWorkflowResponse.FromString,
+                _registered_method=True)
+        self.GetWorkflowRun = channel.unary_unary(
+                '/rota.v1.Workflow/GetWorkflowRun',
+                request_serializer=rota_dot_v1_dot_rota__pb2.WorkflowRunRef.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.WorkflowRun.FromString,
+                _registered_method=True)
+        self.GetWorkflowHistory = channel.unary_unary(
+                '/rota.v1.Workflow/GetWorkflowHistory',
+                request_serializer=rota_dot_v1_dot_rota__pb2.WorkflowRunRef.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.GetWorkflowHistoryResponse.FromString,
+                _registered_method=True)
+        self.ListWorkflowRuns = channel.unary_unary(
+                '/rota.v1.Workflow/ListWorkflowRuns',
+                request_serializer=rota_dot_v1_dot_rota__pb2.ListWorkflowRunsRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.ListWorkflowRunsResponse.FromString,
+                _registered_method=True)
+        self.PollWorkflowTask = channel.unary_unary(
+                '/rota.v1.Workflow/PollWorkflowTask',
+                request_serializer=rota_dot_v1_dot_rota__pb2.PollTaskRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.PolledWorkflowTask.FromString,
+                _registered_method=True)
+        self.RespondWorkflowTask = channel.unary_unary(
+                '/rota.v1.Workflow/RespondWorkflowTask',
+                request_serializer=rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskResponse.FromString,
+                _registered_method=True)
+        self.PollActivityTask = channel.unary_unary(
+                '/rota.v1.Workflow/PollActivityTask',
+                request_serializer=rota_dot_v1_dot_rota__pb2.PollTaskRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.PolledActivityTask.FromString,
+                _registered_method=True)
+        self.RespondActivityTask = channel.unary_unary(
+                '/rota.v1.Workflow/RespondActivityTask',
+                request_serializer=rota_dot_v1_dot_rota__pb2.RespondActivityTaskRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.RespondActivityTaskResponse.FromString,
+                _registered_method=True)
+
+
+class WorkflowServicer:
+    """─────────────────────────────────────────────────────────────────────────────
+    Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+    the read RPCs are follower-servable.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    def StartWorkflow(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SignalWorkflow(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelWorkflow(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetWorkflowRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetWorkflowHistory(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListWorkflowRuns(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PollWorkflowTask(self, request, context):
+        """Worker protocol (language-agnostic; an SDK in any language drives the engine).
+        Poll leases a task; Respond submits the result and acks the lease. Leader-guarded.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RespondWorkflowTask(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PollActivityTask(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RespondActivityTask(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_WorkflowServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'StartWorkflow': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartWorkflow,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.StartWorkflowRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.StartWorkflowResponse.SerializeToString,
+            ),
+            'SignalWorkflow': grpc.unary_unary_rpc_method_handler(
+                    servicer.SignalWorkflow,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.SignalWorkflowRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.SignalWorkflowResponse.SerializeToString,
+            ),
+            'CancelWorkflow': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelWorkflow,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.CancelWorkflowRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.CancelWorkflowResponse.SerializeToString,
+            ),
+            'GetWorkflowRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWorkflowRun,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.WorkflowRunRef.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.WorkflowRun.SerializeToString,
+            ),
+            'GetWorkflowHistory': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWorkflowHistory,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.WorkflowRunRef.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.GetWorkflowHistoryResponse.SerializeToString,
+            ),
+            'ListWorkflowRuns': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListWorkflowRuns,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.ListWorkflowRunsRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.ListWorkflowRunsResponse.SerializeToString,
+            ),
+            'PollWorkflowTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.PollWorkflowTask,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.PollTaskRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.PolledWorkflowTask.SerializeToString,
+            ),
+            'RespondWorkflowTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.RespondWorkflowTask,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskResponse.SerializeToString,
+            ),
+            'PollActivityTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.PollActivityTask,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.PollTaskRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.PolledActivityTask.SerializeToString,
+            ),
+            'RespondActivityTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.RespondActivityTask,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.RespondActivityTaskRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.RespondActivityTaskResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'rota.v1.Workflow', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('rota.v1.Workflow', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class Workflow:
+    """─────────────────────────────────────────────────────────────────────────────
+    Workflow service (Phase 8 durable execution). Mutating RPCs are leader-guarded;
+    the read RPCs are follower-servable.
+    ─────────────────────────────────────────────────────────────────────────────
+    """
+
+    @staticmethod
+    def StartWorkflow(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/StartWorkflow',
+            rota_dot_v1_dot_rota__pb2.StartWorkflowRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.StartWorkflowResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SignalWorkflow(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/SignalWorkflow',
+            rota_dot_v1_dot_rota__pb2.SignalWorkflowRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.SignalWorkflowResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelWorkflow(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/CancelWorkflow',
+            rota_dot_v1_dot_rota__pb2.CancelWorkflowRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.CancelWorkflowResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetWorkflowRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/GetWorkflowRun',
+            rota_dot_v1_dot_rota__pb2.WorkflowRunRef.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.WorkflowRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetWorkflowHistory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/GetWorkflowHistory',
+            rota_dot_v1_dot_rota__pb2.WorkflowRunRef.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.GetWorkflowHistoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListWorkflowRuns(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/ListWorkflowRuns',
+            rota_dot_v1_dot_rota__pb2.ListWorkflowRunsRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.ListWorkflowRunsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PollWorkflowTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/PollWorkflowTask',
+            rota_dot_v1_dot_rota__pb2.PollTaskRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.PolledWorkflowTask.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RespondWorkflowTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/RespondWorkflowTask',
+            rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.RespondWorkflowTaskResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PollActivityTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/PollActivityTask',
+            rota_dot_v1_dot_rota__pb2.PollTaskRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.PolledActivityTask.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RespondActivityTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Workflow/RespondActivityTask',
+            rota_dot_v1_dot_rota__pb2.RespondActivityTaskRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.RespondActivityTaskResponse.FromString,
             options,
             channel_credentials,
             insecure,

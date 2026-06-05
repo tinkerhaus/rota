@@ -30,9 +30,9 @@ var marshaler = protojson.MarshalOptions{EmitUnpopulated: true, UseProtoNames: f
 // service (the same one served over gRPC) so HTTP and gRPC share one code path.
 // staticDir is served for any unmatched route (the SPA); a missing dir simply
 // 404s, so the Go binary never depends on a frontend build existing.
-func Handler(n *node.Node, control *transport.ControlService, staticDir string) http.Handler {
+func Handler(n *node.Node, control *transport.ControlService, wf *transport.WorkflowService, staticDir string) http.Handler {
 	mux := http.NewServeMux()
-	api := &server{n: n, control: control}
+	api := &server{n: n, control: control, wf: wf}
 
 	mux.HandleFunc("/api/cluster", api.cluster)
 	mux.HandleFunc("/api/health", api.health)
@@ -41,6 +41,9 @@ func Handler(n *node.Node, control *transport.ControlService, staticDir string) 
 	mux.HandleFunc("/api/lanes/", api.lanes)
 	// Policy sub-resources: /api/policy/{lane}/health.
 	mux.HandleFunc("/api/policy/", api.policy)
+	// Workflow runs: list/start, and per-run get/history/signal/cancel.
+	mux.HandleFunc("/api/workflows", api.workflows)
+	mux.HandleFunc("/api/workflows/", api.workflows)
 
 	// Static SPA for everything else.
 	fs := http.FileServer(http.Dir(staticDir))
@@ -51,6 +54,20 @@ func Handler(n *node.Node, control *transport.ControlService, staticDir string) 
 type server struct {
 	n       *node.Node
 	control *transport.ControlService
+	wf      *transport.WorkflowService
+}
+
+// requireLeader writes a 409 with a leader-redirect hint when this node is not the
+// raft leader, mirroring the gRPC leader guard for HTTP mutations.
+func (s *server) requireLeader(w http.ResponseWriter) bool {
+	if s.n.IsLeader() {
+		return true
+	}
+	addr, id := s.n.LeaderHint()
+	w.Header().Set("X-Rota-Leader-Addr", addr)
+	w.Header().Set("X-Rota-Leader-Id", id)
+	http.Error(w, "not leader: redirect to "+addr, http.StatusConflict)
+	return false
 }
 
 // ─── Top-level read routes ──────────────────────────────────────────────────────
@@ -88,38 +105,41 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 //	POST dlq/redrive
 func (s *server) lanes(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/lanes/")
-	parts := strings.Split(rest, "/")
-	if len(parts) < 2 || parts[0] == "" {
-		http.NotFound(w, r)
-		return
+	// A lane NAME may itself contain "/" (e.g. "__act/step"), so match the known
+	// suffixes from the RIGHT — the lane is everything before. Longest suffix first.
+	for _, rt := range []struct {
+		suf string
+		fn  func(http.ResponseWriter, *http.Request, string)
+	}{
+		{"fairness/stream", s.fairnessStream},
+		{"fairness", s.fairness},
+		{"groups", s.listGroups},
+		{"dlq/redrive", s.redrive},
+		{"dlq", s.listDLQ},
+		{"leases", s.listLeases},
+	} {
+		if lane, ok := strings.CutSuffix(rest, "/"+rt.suf); ok && lane != "" {
+			rt.fn(w, r, lane)
+			return
+		}
 	}
-	lane := parts[0]
-	switch {
-	case len(parts) == 2 && parts[1] == "groups":
-		s.listGroups(w, r, lane)
-	case len(parts) == 2 && parts[1] == "dlq":
-		s.listDLQ(w, r, lane)
-	case len(parts) == 2 && parts[1] == "leases":
-		s.listLeases(w, r, lane)
-	case len(parts) == 2 && parts[1] == "fairness":
-		s.fairness(w, r, lane)
-	case len(parts) == 3 && parts[1] == "fairness" && parts[2] == "stream":
-		s.fairnessStream(w, r, lane)
-	case len(parts) == 4 && parts[1] == "groups" && parts[3] == "messages":
-		s.peekMessages(w, r, lane, parts[2])
-	case len(parts) == 3 && parts[1] == "dlq" && parts[2] == "redrive":
-		s.redrive(w, r, lane)
-	default:
-		http.NotFound(w, r)
+	// groups/{group}/messages — {group} is a single segment after "/groups/".
+	if i := strings.LastIndex(rest, "/groups/"); i > 0 && strings.HasSuffix(rest, "/messages") {
+		lane := rest[:i]
+		group := rest[i+len("/groups/") : len(rest)-len("/messages")]
+		if lane != "" && group != "" && !strings.Contains(group, "/") {
+			s.peekMessages(w, r, lane, group)
+			return
+		}
 	}
+	http.NotFound(w, r)
 }
 
-// policy dispatches /api/policy/{lane}/health.
+// policy dispatches /api/policy/{lane}/health (lane may contain "/").
 func (s *server) policy(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/policy/")
-	parts := strings.Split(rest, "/")
-	if len(parts) == 2 && parts[0] != "" && parts[1] == "health" {
-		s.policyHealth(w, r, parts[0])
+	if lane, ok := strings.CutSuffix(rest, "/health"); ok && lane != "" {
+		s.policyHealth(w, r, lane)
 		return
 	}
 	http.NotFound(w, r)

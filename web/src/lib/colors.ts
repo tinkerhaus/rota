@@ -36,17 +36,38 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
-export function groupColor(groupId: string | undefined | null): string {
+// ── Observatory signature: one stable HUE per tenant/group ───────────────────
+//
+// The mission-control concept gives every group exactly one color via a
+// hash → hue mapping, painted identically in the ribbon, the share bars, the
+// workflow tenant labels and the lane mini-ribbons. We reuse the same FNV-1a
+// hash so the hue is deterministic and stable across renders/reconnects.
+//
+// The hue is spread across the wheel but nudged away from the ~350° red band
+// reserved for "starving / failed", keeping the signal color distinct.
+
+export function groupHue(groupId: string | undefined | null): number {
   const id = groupId ?? '';
-  return PALETTE[hashId(id) % PALETTE.length];
+  // 0..359, then fold the reserved red wedge (345..360 / 0..12) inward.
+  let hue = hashId(id) % 360;
+  if (hue > 345 || hue < 12) hue = (hue + 40) % 360;
+  return hue;
+}
+
+// The concept's exact group color: `hsl(hue 80% 60%)`.
+export function groupColorHsl(
+  groupId: string | undefined | null,
+  sat = 80,
+  light = 60
+): string {
+  return `hsl(${groupHue(groupId)} ${sat}% ${light}%)`;
+}
+
+export function groupColor(groupId: string | undefined | null): string {
+  return groupColorHsl(groupId);
 }
 
 // A translucent variant of the group color, for fills/backgrounds.
 export function groupColorBg(groupId: string | undefined | null, alpha = 0.16): string {
-  const c = groupColor(groupId);
-  // c is "#rrggbb"
-  const r = parseInt(c.slice(1, 3), 16);
-  const g = parseInt(c.slice(3, 5), 16);
-  const b = parseInt(c.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  return `hsl(${groupHue(groupId)} 80% 60% / ${alpha})`;
 }
