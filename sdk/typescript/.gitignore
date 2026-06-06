@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output (regenerated via `npm run build`)
+dist/
+
+# Test / tool caches
+.vitest/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# NOTE: src/generated/ IS committed (the codegen, analogous to the Python
+# SDK's rota/_gen). Regenerate it with `npm run gen` after a proto change.

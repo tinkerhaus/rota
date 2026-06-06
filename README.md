@@ -12,7 +12,7 @@ lacks: programmable, completion-aware, cross-tenant fairness, on one static bina
 store.
 
 > **Status — pre-production, but feature-complete and tested across the stack.** The broker
-> (Phases 0–4), the durable-execution engine, the language-agnostic worker protocol + Python SDK, and
+> (Phases 0–4), the durable-execution engine, the language-agnostic worker protocol + Python & TypeScript SDKs, and
 > the embedded operator dashboard are all implemented and covered by Go unit/integration tests, a
 > Python end-to-end test, and an adversarial audit of the replay/divergence protocol. APIs may still
 > change. The determinism story is at Temporal-parity (see [Durable execution](#durable-execution));
@@ -89,8 +89,31 @@ run_workflow_worker("127.0.0.1:7300", "orders", "wf-1", decide)                 
 run_id = WorkflowClient("127.0.0.1:7300").start_workflow("orders", tenant_id="tenant-A")
 ```
 
+### TypeScript / Node — broker + durable workflows
+
+```ts
+import { Publisher, Worker, WorkflowClient, runWorkflowWorker, runActivityWorker,
+         scheduleActivity, completeWorkflow, HistoryEventType } from "rota";
+
+await new Publisher("127.0.0.1:7300").publish("orders", "tenant-A", Buffer.from("..."));
+await new Worker("127.0.0.1:7300", "orders", (m) => console.log(m.payload)).run();
+
+// A worker replays a run's history and decides the next step (deterministic on history).
+const decide = (runId, history) => {
+  const sched = history.some((e) => e.eventType === HistoryEventType.HET_ACTIVITY_SCHEDULED);
+  const done  = history.some((e) => e.eventType === HistoryEventType.HET_ACTIVITY_COMPLETED);
+  if (!sched) return [scheduleActivity("charge", Buffer.from("100"))];
+  if (done)   return [completeWorkflow(Buffer.from("ok"))];
+  return [];                                              // waiting on the activity
+};
+runActivityWorker("127.0.0.1:7300", "charge", "act-1", () => [Buffer.from("ok"), true]);
+runWorkflowWorker("127.0.0.1:7300", "orders", "wf-1", decide);
+
+const runId = await new WorkflowClient("127.0.0.1:7300").startWorkflow("orders", { tenantId: "tenant-A" });
+```
+
 Activities dispatch as ordinary, fair-scheduled leases; the worker protocol is gRPC, so an SDK in any
-language can drive the engine.
+language can drive the engine. SDKs ship for [Python](sdk/python/) and [TypeScript](sdk/typescript/).
 
 ## The two layers
 
@@ -150,7 +173,7 @@ An embedded single-page operator console (compiled into the binary, served from 
 | Fairness | Fully programmable policy-as-code, leader-evaluated, completion-aware |
 | Delivery | At-least-once, lease/visibility-timeout |
 | Durable execution | Per-run event-sourced history; worker-side replay; leader-validated commits |
-| Transport | gRPC + protobuf (Broker, Control, Workflow + worker protocol); Python SDK; HTTP/JSON gateway |
+| Transport | gRPC + protobuf (Broker, Control, Workflow + worker protocol); Python & TypeScript SDKs; HTTP/JSON gateway |
 | Scope | Generic broker + generic workflow engine; zero business logic in the core |
 
 ## Non-goals

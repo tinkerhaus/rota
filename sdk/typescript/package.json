@@ -1,0 +1,50 @@
+{
+  "name": "rota",
+  "version": "0.1.0",
+  "description": "Thin, domain-neutral TypeScript SDK for the Rota fair-scheduling message broker and durable workflow engine.",
+  "license": "Apache-2.0",
+  "author": "Rota",
+  "type": "module",
+  "keywords": [
+    "rota",
+    "broker",
+    "grpc",
+    "queue",
+    "fair-scheduling",
+    "message-broker",
+    "durable-execution",
+    "workflow"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "proto",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "gen": "proto-loader-gen-types --grpcLib=@grpc/grpc-js --longs=Number --enums=Number --bytes=Buffer --defaults --oneofs --includeDirs=proto --outDir=src/generated rota/v1/rota.proto",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
