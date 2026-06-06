@@ -178,7 +178,19 @@ func (s *Scheduler) Pick(lane string, active []GroupStat, nowMs int64) (gid stri
 	if w <= 0 {
 		w = 1
 	}
-	ls.vt[gid] += 1.0 / w // WFQ mechanism: serving costs 1 unit of weighted virtual time
+	// WFQ mechanism: serving costs 1 unit of weighted virtual time (1/weight). A
+	// policy may charge MORE via ServeCost (completion_aware charges by in-flight),
+	// which advances the group's virtual clock faster so it is served less — a
+	// sustained rate effect. Never advance LESS than baseline.
+	inc := 1.0 / w
+	if !usedFallback && !ls.quarantined && ls.pol != nil {
+		if cw, ok := ls.pol.(policy.ServeCoster); ok {
+			if c := cw.ServeCost(gv[best]); c > inc {
+				inc = c
+			}
+		}
+	}
+	ls.vt[gid] += inc
 	ls.turn++
 	return gid, usedFallback, true
 }

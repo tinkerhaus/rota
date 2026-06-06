@@ -34,6 +34,16 @@ type Compiled interface {
 	Close()
 }
 
+// ServeCoster is an OPTIONAL interface a policy may implement to charge a custom
+// virtual-time increment when a group is served (the default is the plain WFQ
+// 1/weight). Returning a larger value makes the group's virtual clock advance
+// faster, so it is served proportionally LESS — a sustained rate effect, not the
+// one-time offset an additive score term produces. completion_aware uses this so a
+// tenant sitting on in-flight work is genuinely throttled.
+type ServeCoster interface {
+	ServeCost(g GroupView) float64
+}
+
 func HashSource(b []byte) string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])

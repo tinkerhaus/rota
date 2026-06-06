@@ -64,6 +64,7 @@ type Node struct {
 	raft   *raft.Raft
 	sched  *scheduler.Scheduler
 	cancel context.CancelFunc
+	wg     sync.WaitGroup // background loops; Close waits on it before closing the store
 
 	polMu        sync.Mutex
 	loadedPolVer map[string]uint64 // lane -> compiled policy version on this node
@@ -166,9 +167,12 @@ func Open(cfg Config) (*Node, error) {
 		paused: map[string]int64{}, fairness: newFairnessProjection(),
 		meter: newLaneMeter(),
 	}
-	go n.chronosLoop(ctx)
-	go n.reapLoop(ctx)
-	go n.meterLoop(ctx)
+	// Track the background loops so Close can drain them before closing the store
+	// (they touch Pebble; closing the store from under a mid-iteration sweep panics).
+	n.wg.Add(3)
+	go func() { defer n.wg.Done(); n.chronosLoop(ctx) }()
+	go func() { defer n.wg.Done(); n.reapLoop(ctx) }()
+	go func() { defer n.wg.Done(); n.meterLoop(ctx) }()
 	return n, nil
 }
 
@@ -240,7 +244,8 @@ func (n *Node) Barrier(timeout time.Duration) error { return n.raft.Barrier(time
 func (n *Node) ForceSnapshot() error { return n.raft.Snapshot().Error() }
 
 func (n *Node) Close() error {
-	n.cancel()
+	n.cancel()  // signal the background loops to stop
+	n.wg.Wait() // and wait for them to finish touching the store
 	_ = n.raft.Shutdown().Error()
 	return n.store.Close()
 }

@@ -25,28 +25,34 @@ func (builtinStrict) Score(l LaneView, _ ConsumerView) ([]float64, error) {
 func (builtinStrict) Close() {}
 
 // builtinCompletionAware is WFQ that also accounts for OUTSTANDING work, not just
-// lease-turns. Plain WFQ advances a group's virtual time once per lease handed
-// out; a tenant that leases fast but never completes (acks) looks "fair" by
-// turns while hogging in-flight capacity. This policy inflates each group's
-// effective virtual time by its in-flight backlog normalized by weight
-// (inflight/weight): the more leased-but-unacked work a tenant is sitting on
-// relative to its share, the further "ahead" it looks, so it is served later.
-// Score is -(VirtualTime + inflight/weight) so the least-ahead group wins, same
-// orientation as WFQ. Two equal-weight groups at equal virtual time are split by
-// in-flight: the lower-inflight group scores higher and is served first.
+// lease-turns. Plain WFQ advances a group's virtual time by 1/weight once per
+// lease; a tenant that leases fast but holds work (slow/never acks) looks "fair"
+// by turns while hogging in-flight capacity.
+//
+// It RANKS exactly like WFQ (-VirtualTime), but charges a per-serve virtual-time
+// COST of (1 + inflight)/weight instead of the flat 1/weight (see ServeCost). So
+// every time a tenant with k in-flight items is served, its virtual clock jumps by
+// (1+k)/weight — it is served roughly 1/(1+k) as often as an idle peer for as long
+// as it sits on that work. That is a SUSTAINED rate reduction proportional to the
+// hoarding, not the one-time offset an additive score term gave. When the tenant
+// drains its in-flight, the cost falls back to baseline and WFQ's virtual-time
+// catch-up serves it more until it is even again.
 type builtinCompletionAware struct{}
 
 func (builtinCompletionAware) Score(l LaneView, _ ConsumerView) ([]float64, error) {
-	out := make([]float64, len(l.Groups))
-	for i, g := range l.Groups {
-		w := g.Weight
-		if w <= 0 {
-			w = 1
-		}
-		out[i] = -(g.VirtualTime + float64(g.InFlight)/w)
-	}
-	return out, nil
+	return WFQScores(l.Groups), nil
 }
+
+// ServeCost charges (1 + inflight)/weight per serve: weight-normalized so a heavier
+// tenant (entitled to more capacity) tolerates more in-flight before being throttled.
+func (builtinCompletionAware) ServeCost(g GroupView) float64 {
+	w := g.Weight
+	if w <= 0 {
+		w = 1
+	}
+	return (1 + float64(g.InFlight)) / w
+}
+
 func (builtinCompletionAware) Close() {}
 
 // builtinLottery weights random-ish selection by group weight (deterministic per

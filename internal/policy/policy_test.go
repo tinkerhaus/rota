@@ -30,33 +30,45 @@ func TestBuiltinPolicies(t *testing.T) {
 // later) than the low-inflight one. Plain WFQ, which sees only virtual time,
 // would tie them — so this is exactly the behavior the policy adds.
 func TestCompletionAwarePolicy(t *testing.T) {
-	view := LaneView{Groups: []GroupView{
-		{ID: "hog", Weight: 1, VirtualTime: 0, InFlight: 8},
-		{ID: "lean", Weight: 1, VirtualTime: 0, InFlight: 0},
-	}}
 	c, err := Compile(Binding{Kind: KindCompletionAware})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
 	defer c.Close()
-	sc, err := c.Score(view, ConsumerView{Credit: 1})
+
+	// It ranks like WFQ: lowest virtual time wins (in-flight does NOT distort the
+	// ranking — the throttling is applied via ServeCost, below).
+	sc, err := c.Score(LaneView{Groups: []GroupView{
+		{ID: "ahead", Weight: 1, VirtualTime: 5, InFlight: 0},
+		{ID: "behind", Weight: 1, VirtualTime: 2, InFlight: 9},
+	}}, ConsumerView{Credit: 1})
 	if err != nil {
 		t.Fatalf("score: %v", err)
 	}
 	if !(sc[1] > sc[0]) {
-		t.Fatalf("completion_aware: lean (inflight 0) should outrank hog (inflight 8) at equal weight/vt: %v", sc)
+		t.Fatalf("completion_aware should rank by virtual time (behind wins): %v", sc)
 	}
 
-	// Weight normalizes the in-flight penalty: a heavier group tolerates more
-	// in-flight before it is throttled. Same raw in-flight, higher weight ⇒
-	// higher score (less penalized).
-	view2 := LaneView{Groups: []GroupView{
-		{ID: "light", Weight: 1, VirtualTime: 0, InFlight: 4},
-		{ID: "heavy", Weight: 4, VirtualTime: 0, InFlight: 4},
-	}}
-	sc2, _ := c.Score(view2, ConsumerView{Credit: 1})
-	if !(sc2[1] > sc2[0]) {
-		t.Fatalf("completion_aware: heavier group should absorb in-flight better: %v", sc2)
+	// The in-flight effect lives in the per-serve cost: a hoarder advances its
+	// virtual clock faster, so it is served less — a SUSTAINED rate effect.
+	cw, ok := c.(ServeCoster)
+	if !ok {
+		t.Fatal("completion_aware must implement ServeCoster")
+	}
+	hog := cw.ServeCost(GroupView{Weight: 1, InFlight: 8})
+	lean := cw.ServeCost(GroupView{Weight: 1, InFlight: 0})
+	if !(hog > lean) {
+		t.Fatalf("hoarder (inflight 8) must cost more per serve than lean (inflight 0): %v vs %v", hog, lean)
+	}
+	if lean != 1 {
+		t.Fatalf("baseline serve cost (inflight 0, weight 1) = %v, want 1", lean)
+	}
+	// Weight normalizes it: a heavier group tolerates more in-flight before being
+	// throttled (same raw in-flight ⇒ lower per-serve cost).
+	light := cw.ServeCost(GroupView{Weight: 1, InFlight: 4})
+	heavy := cw.ServeCost(GroupView{Weight: 4, InFlight: 4})
+	if !(heavy < light) {
+		t.Fatalf("heavier group should cost less per serve for the same in-flight: heavy %v vs light %v", heavy, light)
 	}
 
 	// It must survive policy validation (smoke fixtures) so it can be installed.
