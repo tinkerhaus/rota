@@ -41,6 +41,9 @@ store.
 
 ## Quickstart
 
+> **New to Rota?** Start with the [**getting-started guide**](docs/getting-started.md) —
+> it explains the core concepts (lanes, groups, leases, fair policies, durable workflows) from scratch.
+
 ```bash
 go run ./cmd/rota demo                                  # self-contained fairness demo (500-vs-20)
 go run ./cmd/rota serve --grpc :7300 --metrics :7301    # a node: Broker+Control+Workflow on :7300,
