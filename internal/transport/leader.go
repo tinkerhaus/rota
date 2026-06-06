@@ -11,6 +11,7 @@ import (
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/node"
+	"github.com/tinkerhaus/rota/internal/observe"
 )
 
 // notLeaderMetaKey carries a serialized NotLeader detail in the gRPC trailer so
@@ -26,6 +27,7 @@ func requireLeader(ctx context.Context, n *node.Node) error {
 	if n.IsLeader() {
 		return nil
 	}
+	observe.LeaderRedirects.WithLabelValues("unary").Inc()
 	addr, id := n.LeaderHint()
 	if raw, err := proto.Marshal(&rotav1.NotLeader{LeaderAddr: addr, LeaderId: id}); err == nil {
 		_ = grpc.SetTrailer(ctx, metadata.Pairs(notLeaderMetaKey, string(raw)))
@@ -36,6 +38,7 @@ func requireLeader(ctx context.Context, n *node.Node) error {
 // notLeaderFrame builds an in-stream NOT_LEADER error frame for the Work stream,
 // carrying the leader's gRPC address so the consumer can reconnect to it.
 func notLeaderFrame(n *node.Node) *rotav1.WorkServerMsg {
+	observe.LeaderRedirects.WithLabelValues("stream").Inc()
 	addr, _ := n.LeaderHint()
 	return &rotav1.WorkServerMsg{Msg: &rotav1.WorkServerMsg_Error{
 		Error: &rotav1.StreamError{Code: rotav1.ErrorCode_NOT_LEADER, LeaderAddr: addr, Detail: "not leader"},

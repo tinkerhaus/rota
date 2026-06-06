@@ -92,7 +92,8 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 	if !get(w, r) {
 		return
 	}
-	resp, err := s.control.GetStats(r.Context(), &rotav1.GetStatsRequest{Lane: r.URL.Query().Get("lane")})
+	q := r.URL.Query()
+	resp, err := s.control.GetStats(r.Context(), &rotav1.GetStatsRequest{Lane: q.Get("lane"), GroupId: q.Get("group_id")})
 	writeProto(w, resp, err)
 }
 

@@ -206,10 +206,12 @@ type LaneStat struct {
 	PolicyVersion uint64
 	PublishRate   float64 // smoothed events/sec (leader-local meter)
 	LeaseRate     float64
+	AckRate       float64
+	OldestAgeMs   uint64
 }
 
 // Stats aggregates per-lane depth from group metadata (optionally filtered).
-func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
+func (n *Node) Stats(filterLane, filterGroup string) ([]LaneStat, error) {
 	lo, hi := storage.GroupMetaBounds()
 	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
 	if err != nil {
@@ -217,12 +219,16 @@ func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
 	}
 	defer it.Close()
 	agg := map[string]*LaneStat{}
+	now := nowMs()
 	for it.First(); it.Valid(); it.Next() {
 		gm := &rotav1.GroupMeta{}
 		if proto.Unmarshal(it.Value(), gm) != nil {
 			continue
 		}
 		if filterLane != "" && gm.Lane != filterLane {
+			continue
+		}
+		if filterGroup != "" && gm.GroupId != filterGroup {
 			continue
 		}
 		s := agg[gm.Lane]
@@ -234,6 +240,9 @@ func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
 		s.Delayed += gm.DelayedCount
 		s.Inflight += gm.InflightCount
 		s.GroupCount++
+		if age := n.oldestGroupMessageAgeMs(gm.Lane, gm.GroupId, now); age > s.OldestAgeMs {
+			s.OldestAgeMs = age
+		}
 	}
 	out := make([]LaneStat, 0, len(agg))
 	for lane, s := range agg {
@@ -244,10 +253,34 @@ func (n *Node) Stats(filterLane string) ([]LaneStat, error) {
 		s.PolicyVersion = n.loadedPolVer[lane]
 		n.polMu.Unlock()
 		r := n.meter.rates(lane)
-		s.PublishRate, s.LeaseRate = r.Publish, r.Lease
+		s.PublishRate, s.LeaseRate, s.AckRate = r.Publish, r.Lease, r.Ack
 		out = append(out, *s)
 	}
 	return out, nil
+}
+
+func (n *Node) oldestGroupMessageAgeMs(lane, group string, now uint64) uint64 {
+	lo := storage.MessagePrefix(lane, group)
+	hi := storage.PrefixEnd(lo)
+	it, err := n.store.DB.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return 0
+	}
+	defer it.Close()
+	for it.First(); it.Valid(); it.Next() {
+		msg := &rotav1.Message{}
+		if proto.Unmarshal(it.Value(), msg) != nil {
+			continue
+		}
+		if msg.GetState() == rotav1.MessageState_DONE || msg.GetState() == rotav1.MessageState_DEAD {
+			continue
+		}
+		if msg.GetEnqueueMs() == 0 || msg.GetEnqueueMs() > now {
+			return 0
+		}
+		return now - msg.GetEnqueueMs()
+	}
+	return 0
 }
 
 type PeerData struct{ ID, Addr, Suffrage string }

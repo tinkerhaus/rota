@@ -125,10 +125,17 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 		for {
 			m, err := stream.Recv()
 			if err != nil {
-				errCh <- err
+				select {
+				case errCh <- err:
+				case <-ctx.Done():
+				}
 				return
 			}
-			recvCh <- m
+			select {
+			case recvCh <- m:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
@@ -223,6 +230,9 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 
 		// Deliver while we have credit and there is fair work to hand out.
 		for lane != "" && inflight < credit {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			lr, ok, err := b.n.LeaseOneFiltered(lane, consumerID, groupAllow, groupDeny)
 			if err != nil {
 				// Leadership lost mid-stream: redirect rather than fail opaquely.

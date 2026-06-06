@@ -21,6 +21,8 @@ store.
 > Build `go build ./...`, test `go test ./...`, try `go run ./cmd/rota demo`.
 > Design docs live in [`docs/design/`](docs/design/) and [`DESIGN.md`](DESIGN.md); decision records in
 > [`docs/adr/`](docs/adr/); the phase plan in [`docs/design/workflow-engine-roadmap.md`](docs/design/workflow-engine-roadmap.md).
+> SDK parity is tracked in [`docs/sdk-parity.md`](docs/sdk-parity.md); runnable examples live in
+> [`examples/`](examples/).
 
 ## What makes it different
 
@@ -164,6 +166,26 @@ An embedded single-page operator console (compiled into the binary, served from 
 - per-lane **throughput sparklines** and a cluster/Raft readout;
 - a **workflows board** and a per-run **swimlane execution timeline** (activities + decisions on a real
   time axis), with start/signal/cancel actions.
+- a compact **Doctor** panel that mirrors the CLI health checks for cluster
+  liveness, DLQ depth, leases, paused backlogs, and workflow task liveness.
+
+The same operational surface is available from the CLI:
+
+```bash
+go run ./cmd/rota doctor --grpc 127.0.0.1:7300
+go run ./cmd/rota leases list --grpc 127.0.0.1:7300 --lane orders
+go run ./cmd/rota leases force-expire --grpc 127.0.0.1:7300 --lease-id 42
+go run ./cmd/rota dlq redrive --grpc 127.0.0.1:7300 --lane orders --group tenant-A --msg-id 7
+go run ./cmd/rota bench --grpc 127.0.0.1:7300 --messages 10000 --groups 100 --workers 8
+```
+
+For locked-down deployments, `serve` accepts `--auth-token`, `--tls-cert`,
+`--tls-key`, and `--client-ca` for mTLS. CLI clients use `--token`, `--tls-ca`,
+and `--tls-server-name`; SDK clients use `auth_token=` (Python) or `{ authToken }`
+(TypeScript). Offline backups use `rota backup create --data ./data --out
+backup.tar.gz` and `rota backup restore --in backup.tar.gz --data ./data`.
+Prometheus alert rules are shipped in
+[`ops/prometheus/rota-alerts.yml`](ops/prometheus/rota-alerts.yml).
 
 ## Architecture at a glance
 

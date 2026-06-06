@@ -31,6 +31,10 @@ go run ./cmd/rota serve            # Broker+Control+Workflow on 127.0.0.1:7100, 
 The SDK defaults to `127.0.0.1:7100` to match. Pass your own address (or a
 comma-separated seed list / array for a cluster) to any client.
 
+For token-protected clusters, pass `{ authToken: "..." }` to `Publisher`,
+`Worker`, `Control`, `WorkflowClient`, and workflow/activity worker loops. Native
+`@grpc/grpc-js` credentials can be passed via `{ credentials }` for TLS/mTLS.
+
 ## Quickstart
 
 ### Publish
@@ -272,3 +276,6 @@ over gRPC (it skips gracefully if the Go toolchain is unavailable). Coverage:
 > `PeekMessages`, `GetLaneFairness`, `GetPolicyHealth`, `RedriveDeadLetter`) are
 > intentionally not part of the SDK surface — they are served by the broker's
 > HTTP/JSON gateway for the operator dashboard, matching the Python SDK.
+
+See [`../../docs/sdk-parity.md`](../../docs/sdk-parity.md) for Python/TypeScript
+feature parity and [`../../examples/`](../../examples/) for runnable examples.

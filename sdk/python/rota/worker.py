@@ -35,6 +35,7 @@ import grpc
 from rota._common import (
     LeaderClient,
     Targets,
+    auth_metadata,
     extract_not_leader,
     normalize_targets,
     to_duration,
@@ -132,6 +133,8 @@ class Worker:
         reconnect_max_backoff: float = 10.0,
         channel_options: Optional[Sequence] = None,
         credentials=None,
+        metadata=None,
+        auth_token: Optional[str] = None,
     ):
         if credit < 1:
             raise ValueError("credit must be >= 1")
@@ -146,6 +149,7 @@ class Worker:
         self._reconnect_max = reconnect_max_backoff
         self._channel_options = list(channel_options or [])
         self._credentials = credentials
+        self._metadata = auth_metadata(auth_token, metadata)
 
         if isinstance(targets_or_channel, grpc.Channel):
             self._external_channel: Optional[grpc.Channel] = targets_or_channel
@@ -257,7 +261,7 @@ class Worker:
         self._channel = self._open_channel()
         stub = pb_grpc.BrokerStub(self._channel)
 
-        responses = stub.Work(self._request_iterator())
+        responses = stub.Work(self._request_iterator(), metadata=self._metadata or None)
         try:
             for server_msg in responses:
                 which = server_msg.WhichOneof("msg")

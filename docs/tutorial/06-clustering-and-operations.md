@@ -88,6 +88,25 @@ leader within ~a second and your client transparently follows it — no code cha
 no dropped writes once the new leader is up. (This is exactly what the SDK's
 `cluster` test suite asserts against a real 3-node cluster.)
 
+For protected clusters, enable the static gRPC token on every node and pass the
+same token from CLIs and SDK clients:
+
+```bash
+go run ./cmd/rota serve --auth-token "$ROTA_TOKEN" --grpc 127.0.0.1:7201
+go run ./cmd/rota doctor --grpc 127.0.0.1:7201 --token "$ROTA_TOKEN"
+```
+
+```python
+Publisher("127.0.0.1:7201", auth_token=os.environ["ROTA_TOKEN"])
+```
+```ts
+new Publisher("127.0.0.1:7201", { authToken: process.env.ROTA_TOKEN });
+```
+
+Add `--tls-cert` and `--tls-key` for server TLS, plus `--client-ca` for mTLS.
+CLI clients verify TLS with `--tls-ca` and optional `--tls-server-name`; SDKs
+accept the native gRPC credential objects for their language.
+
 ---
 
 ## 6.3 Singleton leases: cluster-wide coordination
@@ -183,9 +202,70 @@ $ curl -s localhost:7301/metrics | grep rota_ | head
 **The dashboard** (`--web web/dist`, served on each node's metrics port) is the
 human view: the fairness ribbon, per-group share bars, the starvation radar,
 throughput sparklines, a DLQ inspector with **redrive**, and the per-run workflow
-swimlanes. The DLQ inspector and redrive live on the HTTP/JSON gateway (the SDK
-intentionally exposes only the broker/control/workflow gRPC surface), so the
-dashboard is the place to triage and re-drive dead letters.
+swimlanes. The home-page **Doctor** panel mirrors the CLI report and flags
+not-serving nodes, quorum loss, unknown leaders, DLQ depth, paused backlogs,
+expired/near-expired leases, and workflow runs whose pending task has no visible
+workflow-task lane depth. The DLQ inspector and redrive live on the HTTP/JSON
+gateway (the SDK intentionally exposes only the broker/control/workflow gRPC
+surface), so the dashboard is the place to triage and re-drive dead letters.
+
+**The CLI** gives the same operator primitives when you are in a shell:
+
+```bash
+# One-shot health report: cluster, lanes, leases, DLQ, and workflow task liveness.
+go run ./cmd/rota doctor --grpc 127.0.0.1:7201
+go run ./cmd/rota doctor --grpc 127.0.0.1:7201 --json
+
+# Inspect and recover leases.
+go run ./cmd/rota leases list --grpc 127.0.0.1:7201 --lane notifications
+go run ./cmd/rota leases force-expire --grpc 127.0.0.1:7201 --lease-id 42 --delay 2s
+
+# Redrive one dead letter as a fresh READY message.
+go run ./cmd/rota dlq redrive --grpc 127.0.0.1:7201 \
+  --lane notifications --group tenant-A --msg-id 7
+
+# Back-pressure and cleanup.
+go run ./cmd/rota lane pause --grpc 127.0.0.1:7201 --lane notifications --duration 30s
+go run ./cmd/rota lane resume --grpc 127.0.0.1:7201 --lane notifications
+go run ./cmd/rota group purge --grpc 127.0.0.1:7201 --lane notifications --group tenant-A
+go run ./cmd/rota workflow cancel --grpc 127.0.0.1:7201 --run-id 99 --reason operator
+```
+
+Prometheus includes counters for publish, lease, ack, nack mode, DLQ reason,
+leader redirects, workflow-task validation rejections, timer fires, and policy
+faults. `GetStats` also reports EWMA publish/lease/ack rates and oldest live
+message age per lane.
+
+The repository includes a starter alert group at
+[`ops/prometheus/rota-alerts.yml`](../../ops/prometheus/rota-alerts.yml). It
+covers target-down, no-leader, no-quorum, rising dead letters, high retry
+pressure, workflow-task rejections, leader-redirect spikes, and policy faults.
+
+---
+
+## 6.6 Backups and load smoke tests
+
+Rota's data directory is embedded state, so backups are deliberately **offline**:
+stop the node, archive the directory, then restart it. Restore refuses a
+non-empty target unless you pass `--force`.
+
+```bash
+go run ./cmd/rota backup create --data ./data-n1 --out rota-n1.tar.gz
+go run ./cmd/rota backup restore --in rota-n1.tar.gz --data ./data-restored
+```
+
+For a quick load smoke test, `bench` publishes a synthetic workload with
+`PublishBatch`, drains it with concurrent Work streams, and reports publish,
+drain, and end-to-end throughput.
+
+```bash
+go run ./cmd/rota bench --grpc 127.0.0.1:7201 \
+  --lane bench --messages 10000 --groups 100 --workers 8 --batch-size 250
+go run ./cmd/rota bench --grpc 127.0.0.1:7201 --json
+```
+
+The repo CI workflow runs Go tests, TypeScript SDK tests, dashboard checks, and
+Python SDK tests on pushes and pull requests.
 
 ---
 
@@ -197,7 +277,7 @@ dashboard is the place to triage and re-drive dead letters.
   any node (or seed several) and writes find the leader.
 - **Singleton leases** give fenced, cluster-wide mutual exclusion.
 - Operate with **rate limits**, **pause/resume**, **health**, **Prometheus
-  metrics**, and the **dashboard**.
+  metrics**, alerts, backups, load smoke tests, and the **dashboard**.
 
 That's the whole system. Loop back to the [tutorial index](README.md), or go deep
 with [`DESIGN.md`](../../DESIGN.md) and the [ADRs](../adr/).

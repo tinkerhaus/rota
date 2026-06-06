@@ -28,6 +28,7 @@ import * as grpc from "@grpc/grpc-js";
 import {
   LeaderClient,
   loadProto,
+  type MetadataInit,
   type LeaderClientOptions,
   type Targets,
 } from "./common.js";
@@ -274,6 +275,8 @@ export interface WorkerLoopOptions {
   signal?: AbortSignal;
   channelOptions?: Partial<grpc.ClientOptions>;
   credentials?: grpc.ChannelCredentials;
+  metadata?: MetadataInit;
+  authToken?: string;
   /** Per-poll deadline in seconds (default 30). */
   timeout?: number | null;
 }
@@ -285,6 +288,8 @@ function makeWorkflowClient(
   return new LeaderClient(targets, loadProto().rota.v1.Workflow, {
     channelOptions: opts.channelOptions,
     credentials: opts.credentials,
+    metadata: opts.metadata,
+    authToken: opts.authToken,
   });
 }
 

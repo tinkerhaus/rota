@@ -70,7 +70,7 @@ export {
 } from "./enums.js";
 
 // Shared types.
-export type { Targets, LeaderClientOptions } from "./common.js";
+export type { Targets, LeaderClientOptions, MetadataInit } from "./common.js";
 
 // Curated message shapes returned by the public API (the proto ``__Output``
 // types, re-exported under friendly names).

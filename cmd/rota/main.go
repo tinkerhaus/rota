@@ -1,4 +1,4 @@
-// Command rota is the single-binary broker. Phase 0 supports two subcommands:
+// Command rota is the single-binary broker and operator CLI.
 //
 //	rota serve   run a single-node broker and serve the gRPC Broker API
 //	rota demo    self-contained demo proving cross-group DRR fairness
@@ -31,7 +31,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: rota <serve|demo> [flags]")
+		fmt.Fprintln(os.Stderr, rootUsage())
 		os.Exit(2)
 	}
 	var err error
@@ -40,8 +40,27 @@ func main() {
 		err = cmdServe(os.Args[2:])
 	case "demo":
 		err = cmdDemo(os.Args[2:])
+	case "doctor":
+		err = cmdDoctor(os.Args[2:])
+	case "dlq":
+		err = cmdDLQ(os.Args[2:])
+	case "lane":
+		err = cmdLane(os.Args[2:])
+	case "group":
+		err = cmdGroup(os.Args[2:])
+	case "workflow":
+		err = cmdWorkflow(os.Args[2:])
+	case "leases":
+		err = cmdLeases(os.Args[2:])
+	case "messages":
+		err = cmdMessages(os.Args[2:])
+	case "bench":
+		err = cmdBench(os.Args[2:])
+	case "backup":
+		err = cmdBackup(os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, "unknown command:", os.Args[1])
+		fmt.Fprintln(os.Stderr, rootUsage())
 		os.Exit(2)
 	}
 	if err != nil {
@@ -50,12 +69,30 @@ func main() {
 	}
 }
 
+func rootUsage() string {
+	return `usage: rota <command> [flags]
+
+commands:
+  serve       run a Rota broker node
+  demo        run a self-contained fairness demo
+  doctor      inspect cluster health, lanes, leases, DLQ, and workflow task liveness
+  dlq         redrive dead letters
+  lane        pause/resume/configure a lane
+  group       pause/resume/cancel/purge/reap a group
+  workflow    cancel a workflow run
+  leases      list in-flight leases
+  messages    peek messages in a group
+  bench       publish and drain a load-test workload
+  backup      create or restore an offline data-directory archive`
+}
+
 func cmdServe(args []string) error {
 	cfg := node.Config{DataDir: "./data", NodeID: "node1"}
 	addr := "127.0.0.1:7100"
 	metricsAddr := "127.0.0.1:7101"
 	webDir := "web/dist"
 	var peers, grpcPeers string
+	var authToken, tlsCert, tlsKey, clientCA string
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
 		case "--data":
@@ -76,6 +113,14 @@ func cmdServe(args []string) error {
 			peers = args[i+1] // id1=raftaddr1,id2=raftaddr2,...
 		case "--grpc-peers":
 			grpcPeers = args[i+1] // id1=grpcaddr1,id2=grpcaddr2,...
+		case "--auth-token":
+			authToken = args[i+1]
+		case "--tls-cert":
+			tlsCert = args[i+1]
+		case "--tls-key":
+			tlsKey = args[i+1]
+		case "--client-ca":
+			clientCA = args[i+1]
 		case "--visibility":
 			if secs, err := strconv.Atoi(args[i+1]); err == nil {
 				cfg.VisibilityMs = uint64(secs) * 1000
@@ -97,12 +142,23 @@ func cmdServe(args []string) error {
 	if err := n.WaitClusterLeader(15 * time.Second); err != nil {
 		return err
 	}
+	registerNodeHealthMetrics(n)
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	srv := grpc.NewServer(grpc.UnaryInterceptor(transport.LeaderGuardInterceptor(n)))
+	var grpcOpts []grpc.ServerOption
+	if creds, err := serverTransportCredentials(tlsCert, tlsKey, clientCA); err != nil {
+		return err
+	} else if creds != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(creds))
+	}
+	grpcOpts = append(grpcOpts,
+		grpc.ChainUnaryInterceptor(transport.AuthUnaryInterceptor(authToken), transport.LeaderGuardInterceptor(n)),
+		grpc.ChainStreamInterceptor(transport.AuthStreamInterceptor(authToken)),
+	)
+	srv := grpc.NewServer(grpcOpts...)
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))
 	control := transport.NewControl(n)
 	rotav1.RegisterControlServer(srv, control)

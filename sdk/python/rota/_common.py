@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Callable, List, Optional, Sequence, TypeVar, Union
+from typing import Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 import grpc
 from google.protobuf import duration_pb2, timestamp_pb2
@@ -19,6 +19,7 @@ from rota._gen.rota.v1 import rota_pb2 as pb
 T = TypeVar("T")
 
 Targets = Union[str, Sequence[str], grpc.Channel]
+Metadata = Sequence[Tuple[str, str]]
 
 
 def normalize_targets(targets: Targets) -> List[str]:
@@ -44,6 +45,15 @@ def to_timestamp(epoch_seconds: Optional[float]) -> Optional[timestamp_pb2.Times
     ts = timestamp_pb2.Timestamp()
     ts.FromNanoseconds(int(epoch_seconds * 1e9))
     return ts
+
+
+def auth_metadata(auth_token: Optional[str] = None, metadata: Optional[Metadata] = None) -> Metadata:
+    """Build per-call metadata, including Rota's static bearer token when set."""
+    out = list(metadata or [])
+    if auth_token:
+        out.append(("authorization", f"Bearer {auth_token}"))
+        out.append(("x-rota-token", auth_token))
+    return tuple(out)
 
 
 def extract_not_leader(err: grpc.RpcError) -> Optional[str]:
@@ -103,6 +113,8 @@ class LeaderClient:
         base_backoff: float = 0.1,
         max_backoff: float = 5.0,
         credentials: Optional[grpc.ChannelCredentials] = None,
+        metadata: Optional[Metadata] = None,
+        auth_token: Optional[str] = None,
     ):
         self._stub_factory = stub_factory
         self._channel_options = list(channel_options or [])
@@ -110,6 +122,7 @@ class LeaderClient:
         self._base_backoff = base_backoff
         self._max_backoff = max_backoff
         self._credentials = credentials
+        self._metadata = auth_metadata(auth_token, metadata)
 
         # Allow passing a pre-built channel directly (tests / shared channel).
         if isinstance(targets, grpc.Channel):
@@ -181,7 +194,7 @@ class LeaderClient:
         for attempt in range(self._max_retries + 1):
             method = getattr(self.stub, method_name)
             try:
-                return method(request, timeout=timeout)
+                return method(request, timeout=timeout, metadata=self._metadata or None)
             except grpc.RpcError as err:
                 last_err = err
                 leader = extract_not_leader(err)

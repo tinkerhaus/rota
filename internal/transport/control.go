@@ -243,7 +243,7 @@ func (c *ControlService) CompleteByToken(ctx context.Context, req *rotav1.Comple
 }
 
 func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsRequest) (*rotav1.StatsResponse, error) {
-	stats, err := c.n.Stats(req.GetLane())
+	stats, err := c.n.Stats(req.GetLane(), req.GetGroupId())
 	if err != nil {
 		return nil, err
 	}
@@ -251,11 +251,11 @@ func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsReque
 	for _, s := range stats {
 		// publish_rate/lease_rate are smoothed (EWMA) events/sec from the leader's
 		// per-lane meter; depths are a point-in-time aggregate over group metadata.
-		// ack_rate/oldest_age_ms remain 0 (not yet metered).
 		resp.Lanes = append(resp.Lanes, &rotav1.LaneStats{
 			Lane: s.Lane, Leasable: s.Leasable, Delayed: s.Delayed, Inflight: s.Inflight,
 			DlqDepth: s.DLQ, GroupCount: s.GroupCount, PolicyVersion: s.PolicyVersion,
-			PublishRate: s.PublishRate, LeaseRate: s.LeaseRate,
+			PublishRate: s.PublishRate, LeaseRate: s.LeaseRate, AckRate: s.AckRate,
+			OldestAgeMs: s.OldestAgeMs,
 		})
 	}
 	return resp, nil

@@ -2,6 +2,7 @@
   import { api, num, type LaneStats } from '$lib/api';
   import { createPoll } from '$lib/poll.svelte';
   import { fmtInt, fmtRate } from '$lib/format';
+  import DoctorPanel from '$lib/components/DoctorPanel.svelte';
   import LaneCard from '$lib/components/LaneCard.svelte';
   import WorkflowsSummary from '$lib/components/WorkflowsSummary.svelte';
 
@@ -137,6 +138,7 @@
 
     <!-- Workflows summary -->
     <aside class="wf-col">
+      <DoctorPanel />
       <WorkflowsSummary />
     </aside>
   </div>
@@ -197,6 +199,9 @@
     margin-top: 16px;
     position: sticky;
     top: 110px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
 
   @media (max-width: 1040px) {
