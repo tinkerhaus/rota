@@ -31,7 +31,7 @@ Rota is a single statically-linked Go binary that collapses four jobs commonly s
 - **Delayed publish** (`not_before`) and **scheduled/recurring publish** (generic cron) as first-class capabilities, fired exactly-once cluster-wide, surviving restart, with coalesce/misfire-grace.
 - **Complete-by-token**: hold a leased message in-flight (long, extendable visibility) while a consumer hands work to an external system, then complete/fail it later by an external id — from any process, with no consumer-side table.
 - High-cardinality, ephemeral groups (thousands, churning), auto-reaped when drained+idle; pause/resume/cancel/purge a single group in place; one-call teardown across all lanes.
-- gRPC/HTTP-2 transport with a bidirectional streaming **Work** RPC + unary control plane; a thin generic Python SDK.
+- gRPC/HTTP-2 transport with a bidirectional streaming **Work** RPC + unary control plane; thin generic Python & TypeScript SDKs.
 - HA: 3/5-node Raft cluster, quorum-acked durability, automatic failover; single-node dev mode on the same code path.
 
 ### Non-Goals (explicitly NOT built)
@@ -548,9 +548,18 @@ Default visibility 60s (comfortably exceeds the keepalive failure-detection wind
 
 ---
 
-## 10. Python SDK (thin, generic)
+## 10. SDKs (thin, generic)
 
-Two classes preserving the familiar `process(message) -> ack/nack` consumer contract. Zero business concepts.
+Two SDKs ship — **Python** ([`sdk/python`](sdk/python)) and **TypeScript/Node**
+([`sdk/typescript`](sdk/typescript)) — with deliberately symmetric surfaces
+(`Publisher` / `Worker` / `Control` / `WorkflowClient` + the workflow/activity
+worker loops). Both follow the leader on `NOT_LEADER` and are covered by an
+end-to-end suite that drives a real broker (the TypeScript suite also boots a real
+3-node cluster to exercise leader-following on both the unary and `Work`-stream
+paths). The description below is the Python surface; the TypeScript SDK mirrors it
+method-for-method (camelCase, options objects, Promises). Both preserve the
+familiar `process(message) -> ack/nack` consumer contract with zero business
+concepts.
 
 **`Publisher`** — lazy connect; transparent leader-following (catch `NotLeader`, re-point, retry with bounded exponential backoff + jitter via `tenacity`). `publish(...)` returns `message_id`; `publish_batch(msgs, atomic=...)` is the fan-out path; `complete(external_token=..., outcome=...)` and `cancel_group`/`reap_group` are thin `Control` pass-throughs for the async-callback process.
 

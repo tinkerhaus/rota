@@ -41,8 +41,10 @@ store.
 
 ## Quickstart
 
-> **New to Rota?** Start with the [**getting-started guide**](docs/getting-started.md) —
-> it explains the core concepts (lanes, groups, leases, fair policies, durable workflows) from scratch.
+> **New to Rota?** Start with the [**getting-started guide**](docs/getting-started.md)
+> for the core concepts (lanes, groups, leases, fair policies, durable workflows),
+> then work through the [**hands-on tutorial**](docs/tutorial/) — a build-it-as-you-go
+> walkthrough of the whole system with working **Python and TypeScript** code.
 
 ```bash
 go run ./cmd/rota demo                                  # self-contained fairness demo (500-vs-20)

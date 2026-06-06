@@ -13,6 +13,11 @@ publish, consume, and run a durable workflow.
 If you remember one idea, remember this: **the unit of fairness is the *group*, and
 the scheduling policy is code you control.**
 
+> **Want hands-on instead of concepts?** The [**Tutorial**](tutorial/) is a
+> build-it-as-you-go walkthrough of the whole system with working **Python and
+> TypeScript** code at every step. This page is the *why*; the tutorial is the
+> *how*.
+
 ---
 
 ## 1. Why Rota exists
@@ -185,9 +190,11 @@ cd web && pnpm install && pnpm build      # → web/dist
 # open http://localhost:7101
 ```
 
-**Publish & consume** (Python SDK in [`sdk/python`](../sdk/python)):
+**Publish & consume.** SDKs ship for [Python](../sdk/python) and
+[TypeScript](../sdk/typescript) — the APIs mirror each other.
 
 ```python
+# Python
 from rota import Publisher, Worker
 
 Publisher("127.0.0.1:7100").publish("emails", group_id="tenant-A", payload=b"hello")
@@ -195,6 +202,17 @@ Publisher("127.0.0.1:7100").publish("emails", group_id="tenant-A", payload=b"hel
 # leases, runs your handler, acks on return; raise to nack/retry/dead-letter
 Worker("127.0.0.1:7100", lane="emails",
        handler=lambda m: print(m.group_id, m.payload)).run()
+```
+
+```ts
+// TypeScript
+import { Publisher, Worker } from "rota";
+
+await new Publisher("127.0.0.1:7100").publish("emails", "tenant-A", Buffer.from("hello"));
+
+// leases, runs your handler, acks on return; throw to nack/retry/dead-letter
+await new Worker("127.0.0.1:7100", "emails",
+  (m) => console.log(m.groupId, m.payload)).run();
 ```
 
 **A durable workflow** — the workflow worker replays history and decides; the
@@ -218,7 +236,10 @@ WorkflowClient("127.0.0.1:7100").start_workflow("orders", tenant_id="tenant-A")
 ```
 
 Command helpers for the `decide` function: `schedule_activity`, `start_timer`,
-`continue_as_new`, `complete_workflow`, `fail_workflow`.
+`continue_as_new`, `complete_workflow`, `fail_workflow`. The
+[Tutorial Part 5](tutorial/05-durable-workflows.md) walks through the same
+workflow — plus signals, timers, cancellation, and continue-as-new — in both
+Python and TypeScript.
 
 **Watch it happen** — the **Observatory dashboard** at `http://localhost:7101`: a
 live served-order ribbon (who got served, in order; each tenant its own colour),
@@ -262,8 +283,10 @@ and a swimlane execution timeline for each workflow run.
 
 ## Where to go next
 
+- [**Tutorial**](tutorial/) — hands-on, build-it-as-you-go, in Python **and**
+  TypeScript: broker, fairness, reliability, durable workflows, clustering.
 - [`README.md`](../README.md) — feature overview and status.
 - [`DESIGN.md`](../DESIGN.md) — full architecture.
 - [`docs/design/`](design/) — durable-execution design, the UI synthesis, non-goals.
 - [`docs/adr/`](adr/) — the decision records.
-- [`sdk/python/`](../sdk/python) — the Python SDK and examples.
+- [`sdk/python/`](../sdk/python) and [`sdk/typescript/`](../sdk/typescript) — the SDKs.
