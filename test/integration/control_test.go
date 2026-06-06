@@ -160,14 +160,14 @@ func TestCompleteByToken(t *testing.T) {
 		t.Fatalf("issue token: %v", err)
 	}
 	// Completion can arrive from any process, identified only by the token.
-	dl, unknown, err := n.Complete(tok, true, nil)
+	dl, unknown, err := n.Complete(tok, true, nil, 0)
 	if err != nil || dl || unknown {
 		t.Fatalf("complete success: dl=%v unknown=%v err=%v", dl, unknown, err)
 	}
 	if _, ok := leaseOne(t, n, lane); ok {
 		t.Fatal("message should be gone after successful completion")
 	}
-	if _, unknown2, _ := n.Complete([]byte("bogus-token-1234"), true, nil); !unknown2 {
+	if _, unknown2, _ := n.Complete([]byte("bogus-token-1234"), true, nil, 0); !unknown2 {
 		t.Fatal("expected unknown=true for an unrecognized token")
 	}
 }

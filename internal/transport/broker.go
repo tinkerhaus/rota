@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
@@ -37,6 +38,7 @@ func publishReqFromSpec(m *rotav1.MessageSpec) node.PublishReq {
 		Headers:       m.GetHeaders(),
 		MaxAttempts:   m.GetMaxAttempts(),
 		NotBeforeMs:   resolveNotBefore(m),
+		TtlMs:         durationMs(m.GetTtl()),
 		IssueToken:    m.GetIssueToken(),
 		ExternalToken: m.GetExternalToken(),
 		DedupKey:      m.GetDedupKey(),
@@ -94,12 +96,25 @@ func resolveNotBefore(m *rotav1.MessageSpec) uint64 {
 	return 0
 }
 
+// durationMs converts an optional protobuf Duration to milliseconds (0 if unset
+// or non-positive).
+func durationMs(d *durationpb.Duration) uint64 {
+	if d == nil {
+		return 0
+	}
+	if ms := d.AsDuration().Milliseconds(); ms > 0 {
+		return uint64(ms)
+	}
+	return 0
+}
+
 // Work is the bidirectional stream: the client advertises credit and acks/nacks;
 // the server fair-leases and streams messages. credit=1 ⇒ strictly serial.
 func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 	ctx := stream.Context()
 	var lane string
 	consumerID := "consumer"
+	var groupAllow, groupDeny []string
 	credit := 0
 	inflight := 0
 	lastPaused := false
@@ -143,6 +158,14 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 				if c := x.LeaseRequest.GetConsumerId(); c != "" {
 					consumerID = c
 				}
+				// Group filters apply for the life of the stream; the latest
+				// LeaseRequest wins (nil leaves the prior filters unchanged).
+				if ga := x.LeaseRequest.GetGroupAllow(); ga != nil {
+					groupAllow = ga
+				}
+				if gd := x.LeaseRequest.GetGroupDeny(); gd != nil {
+					groupDeny = gd
+				}
 				credit += int(x.LeaseRequest.GetCredit())
 			case *rotav1.WorkClientMsg_Ack:
 				if inflight > 0 {
@@ -177,6 +200,7 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 					x.Complete.GetExternalToken(),
 					x.Complete.GetOutcome() == rotav1.Outcome_SUCCESS,
 					x.Complete.GetResultMeta(),
+					durationMs(x.Complete.GetDelay()),
 				)
 			}
 		case <-ticker.C:
@@ -199,7 +223,7 @@ func (b *BrokerService) Work(stream rotav1.Broker_WorkServer) error {
 
 		// Deliver while we have credit and there is fair work to hand out.
 		for lane != "" && inflight < credit {
-			lr, ok, err := b.n.LeaseOne(lane, consumerID)
+			lr, ok, err := b.n.LeaseOneFiltered(lane, consumerID, groupAllow, groupDeny)
 			if err != nil {
 				// Leadership lost mid-stream: redirect rather than fail opaquely.
 				if !b.n.IsLeader() {

@@ -182,6 +182,16 @@ func (f *FSM) publishOne(b *pebble.Batch, c *PublishCmd, gm *rotav1.GroupMeta) (
 		gm.ReadyCount++
 	}
 
+	// TTL: auto-expire (dead-letter, reason "ttl") if still undelivered at the cap.
+	// Not epoch-fenced — the cap is absolute from enqueue regardless of redelivery,
+	// and the fire handler only acts while the message is still leasable.
+	if c.TtlExpiryMs > c.NowMs {
+		msg.TtlMs = c.TtlExpiryMs - c.NowMs
+		if err := addTimer(b, c.TtlExpiryMs, storage.TimerMsgExpiry, storage.ReadyAtRef(c.Lane, c.GroupID, msgID), 0); err != nil {
+			return 0, err
+		}
+	}
+
 	if err := putProto(b, storage.MessageKey(c.Lane, c.GroupID, msgID), msg); err != nil {
 		return 0, err
 	}
@@ -261,11 +271,19 @@ func (f *FSM) recordDedup(b *pebble.Batch, c *PublishCmd, msgID uint64) error {
 func (f *FSM) applyPublishBatch(b *pebble.Batch, c *PublishBatchCmd) (interface{}, error) {
 	cache := map[string]*rotav1.GroupMeta{}
 	order := make([]string, 0, len(c.Items))
+	// batchDedup collapses duplicates WITHIN this batch: checkDedup only sees
+	// committed state (the prior items' dedup rows aren't committed yet), so a
+	// repeated (lane, dedup_key) inside one batch would otherwise publish twice.
+	batchDedup := map[string]uint64{}
 	res := &PublishBatchResult{Items: make([]PublishItemResult, len(c.Items))}
 	for i := range c.Items {
 		item := &c.Items[i]
 		if item.DedupKey != "" {
 			if id, dup := f.checkDedup(item); dup {
+				res.Items[i] = PublishItemResult{MsgID: id, OK: true, Duplicate: true}
+				continue
+			}
+			if id, dup := batchDedup[item.Lane+"\x00"+item.DedupKey]; dup {
 				res.Items[i] = PublishItemResult{MsgID: id, OK: true, Duplicate: true}
 				continue
 			}
@@ -293,6 +311,9 @@ func (f *FSM) applyPublishBatch(b *pebble.Batch, c *PublishBatchCmd) (interface{
 				res.Items[i] = PublishItemResult{Err: err.Error()}
 				continue
 			}
+			// Only record for within-batch collapse AFTER a successful publish, so a
+			// failed best-effort item never masks a later same-key item as its dup.
+			batchDedup[item.Lane+"\x00"+item.DedupKey] = id
 		}
 		res.Items[i] = PublishItemResult{MsgID: id, OK: true}
 	}
@@ -452,7 +473,13 @@ func (f *FSM) applyNack(b *pebble.Batch, c *NackCmd) (interface{}, error) {
 			}
 			return &NackResult{OK: true, DeadLettered: true}, nil
 		}
-		readyAt := c.NowMs + backoffMs(msg.MsgId, msg.Attempt)
+		// A caller-supplied delay (e.g. a failed complete-by-token requesting a
+		// specific retry delay) overrides the default exponential backoff.
+		delay := backoffMs(msg.MsgId, msg.Attempt)
+		if c.DelayMs > 0 {
+			delay = c.DelayMs
+		}
+		readyAt := c.NowMs + delay
 		if err := f.makeReady(b, msg, gm, readyAt, c.NowMs); err != nil {
 			return nil, err
 		}
@@ -635,6 +662,33 @@ func (f *FSM) applyFireTimer(b *pebble.Batch, c *FireTimerCmd) (interface{}, err
 		if runID, startedID, okRef := storage.ParseWFTimerRef(c.Ref); okRef {
 			if err := f.recordTimerFired(b, runID, startedID, c.FireAt); err != nil {
 				return nil, err
+			}
+		}
+
+	case storage.TimerMsgExpiry:
+		// Message TTL elapsed. Dead-letter (reason "ttl") only if the message is
+		// still undelivered (READY/DELAYED); a LEASED message was delivered in time,
+		// and a gone message already completed — both benign no-ops.
+		if lane, group, msgID, okRef := storage.ParseReadyAtRef(c.Ref); okRef {
+			msg := &rotav1.Message{}
+			if mf, _ := f.s.GetProto(storage.MessageKey(lane, group, msgID), msg); mf &&
+				(msg.State == rotav1.MessageState_READY || msg.State == rotav1.MessageState_DELAYED) {
+				gm := &rotav1.GroupMeta{}
+				gf, _ := f.s.GetProto(storage.GroupMetaKey(lane, group), gm)
+				if msg.State == rotav1.MessageState_READY {
+					decr(&gm.ReadyCount)
+				} else {
+					decr(&gm.DelayedCount)
+				}
+				if err := f.deadLetter(b, msg, "ttl", nil, c.FireAt); err != nil {
+					return nil, err
+				}
+				decr(&gm.TotalCount)
+				if gf {
+					if err := putProto(b, storage.GroupMetaKey(lane, group), gm); err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 

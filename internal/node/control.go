@@ -186,10 +186,10 @@ func (n *Node) registerToken(leaseID uint64, token []byte) error {
 	return nil
 }
 
-func (n *Node) Complete(token []byte, success bool, meta map[string]string) (deadLettered, unknown bool, err error) {
+func (n *Node) Complete(token []byte, success bool, meta map[string]string, delayMs uint64) (deadLettered, unknown bool, err error) {
 	h := sha256.Sum256(token)
 	res, e := n.apply(fsm.Command{Type: fsm.CmdComplete, Complete: &fsm.CompleteCmd{
-		TokenHash: h[:], Success: success, Meta: meta, NowMs: nowMs(),
+		TokenHash: h[:], Success: success, Meta: meta, DelayMs: delayMs, NowMs: nowMs(),
 	}})
 	if e != nil {
 		return false, false, e

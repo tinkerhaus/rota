@@ -32,7 +32,7 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import grpc
 
-from rota._common import LeaderClient, Targets, normalize_targets
+from rota._common import LeaderClient, Targets
 from rota._gen.rota.v1 import rota_pb2 as pb
 from rota._gen.rota.v1 import rota_pb2_grpc as pb_grpc
 
@@ -276,22 +276,6 @@ Decider = Callable[[int, List[pb.HistoryEvent]], Sequence[Command]]
 ActivityHandler = Callable[[ActivityTask], Tuple[bytes, bool]]
 
 
-def _resolve_channel(
-    channel_or_addr: Union[str, Sequence[str], grpc.Channel],
-    channel_options: Optional[Sequence],
-    credentials,
-) -> Tuple[grpc.Channel, bool]:
-    """Return ``(channel, owned)``; ``owned`` is True if we created it."""
-    if isinstance(channel_or_addr, grpc.Channel):
-        return channel_or_addr, False
-    targets = normalize_targets(channel_or_addr)
-    if not targets:
-        raise ValueError("at least one target address is required")
-    if credentials is not None:
-        return grpc.secure_channel(targets[0], credentials, channel_options or []), True
-    return grpc.insecure_channel(targets[0], channel_options or []), True
-
-
 def run_workflow_worker(
     channel_or_addr: Union[str, Sequence[str], grpc.Channel],
     workflow_type: str,
@@ -319,13 +303,17 @@ def run_workflow_worker(
     :param stop_event: set it to stop the loop after the next poll cycle.
     """
     stop = stop_event or threading.Event()
-    channel, owned = _resolve_channel(channel_or_addr, channel_options, credentials)
-    stub = pb_grpc.WorkflowStub(channel)
+    client = LeaderClient(
+        channel_or_addr,
+        pb_grpc.WorkflowStub,
+        channel_options=channel_options,
+        credentials=credentials,
+    )
     req = pb.PollTaskRequest(task_type=workflow_type, consumer_id=consumer_id)
     try:
         while not stop.is_set():
             try:
-                task = stub.PollWorkflowTask(req, timeout=timeout)
+                task = client.call("PollWorkflowTask", req, timeout=timeout)
             except grpc.RpcError:
                 if stop.is_set():
                     break
@@ -339,20 +327,25 @@ def run_workflow_worker(
             checksum = prefix_checksum(history)
             commands = decide(task.run_id, history) or []
             cmd_protos = [c.to_proto() for c in commands]
-            stub.RespondWorkflowTask(
-                pb.RespondWorkflowTaskRequest(
-                    run_id=task.run_id,
-                    lease_id=task.lease_id,
-                    run_epoch=task.run_epoch,
-                    history_seq=task.history_seq,
-                    prefix_checksum=checksum,
-                    commands=cmd_protos,
-                ),
-                timeout=timeout,
-            )
+            try:
+                client.call(
+                    "RespondWorkflowTask",
+                    pb.RespondWorkflowTaskRequest(
+                        run_id=task.run_id,
+                        lease_id=task.lease_id,
+                        run_epoch=task.run_epoch,
+                        history_seq=task.history_seq,
+                        prefix_checksum=checksum,
+                        commands=cmd_protos,
+                    ),
+                    timeout=timeout,
+                )
+            except grpc.RpcError:
+                if stop.is_set():
+                    break
+                time.sleep(_POLL_IDLE_SLEEP)
     finally:
-        if owned:
-            channel.close()
+        client.close()
 
 
 def run_activity_worker(
@@ -381,13 +374,17 @@ def run_activity_worker(
     :param stop_event: set it to stop the loop after the next poll cycle.
     """
     stop = stop_event or threading.Event()
-    channel, owned = _resolve_channel(addr, channel_options, credentials)
-    stub = pb_grpc.WorkflowStub(channel)
+    client = LeaderClient(
+        addr,
+        pb_grpc.WorkflowStub,
+        channel_options=channel_options,
+        credentials=credentials,
+    )
     req = pb.PollTaskRequest(task_type=activity_type, consumer_id=consumer_id)
     try:
         while not stop.is_set():
             try:
-                polled = stub.PollActivityTask(req, timeout=timeout)
+                polled = client.call("PollActivityTask", req, timeout=timeout)
             except grpc.RpcError:
                 if stop.is_set():
                     break
@@ -402,16 +399,21 @@ def run_activity_worker(
                 result, success = handler(task)
             except Exception:  # noqa: BLE001 - any handler error => failed activity
                 result, success = b"", False
-            stub.RespondActivityTask(
-                pb.RespondActivityTaskRequest(
-                    run_id=task.run_id,
-                    lease_id=task.lease_id,
-                    scheduled_event_id=task.scheduled_event_id,
-                    success=success,
-                    result=result or b"",
-                ),
-                timeout=timeout,
-            )
+            try:
+                client.call(
+                    "RespondActivityTask",
+                    pb.RespondActivityTaskRequest(
+                        run_id=task.run_id,
+                        lease_id=task.lease_id,
+                        scheduled_event_id=task.scheduled_event_id,
+                        success=success,
+                        result=result or b"",
+                    ),
+                    timeout=timeout,
+                )
+            except grpc.RpcError:
+                if stop.is_set():
+                    break
+                time.sleep(_POLL_IDLE_SLEEP)
     finally:
-        if owned:
-            channel.close()
+        client.close()

@@ -290,34 +290,74 @@ func (n *Node) RunWorkflowWorker(ctx context.Context, workflowType, consumerID s
 			sleepCtx(ctx, 15*time.Millisecond)
 			continue
 		}
-		n.driveWorkflowTask(lr, decide)
-		_ = n.Ack(lr.LeaseID)
+		n.settleWorkflowTask(lr.LeaseID, n.driveWorkflowTask(lr, decide))
+	}
+}
+
+// WorkflowTaskRetryDelayMs is how long a workflow task waits before redelivery
+// when it could not be consumed, instead of being dropped (which wedges the run).
+const WorkflowTaskRetryDelayMs uint64 = 1000
+
+// wfTaskResult is the disposition of one driven workflow task. Exactly one of the
+// three branches is meaningful:
+//   - drop:  a benign no-op (malformed payload, or a stale/closed run already
+//            superseded by a fresh task) — safe to consume the lease.
+//   - retry: the task could NOT be processed (a transient error, OR the decider
+//            returned an invalid command) — it must be requeued, never dropped.
+//   - res:   the gate ran; ack on applied/stale/closed, else requeue.
+type wfTaskResult struct {
+	res   *fsm.WFAppendResult
+	drop  bool
+	retry bool
+}
+
+// settleWorkflowTask consumes a workflow-task lease only when it is safe: the
+// decision applied, the task is a benign no-op, or it was superseded/closed. A
+// rejection, a transient error, or an invalid decision REQUEUES the task (with a
+// delay) rather than acking it — acking there would delete the only task while
+// the run still has wf_task_pending=true, wedging it forever.
+func (n *Node) settleWorkflowTask(leaseID uint64, r wfTaskResult) {
+	switch {
+	case r.drop:
+		_ = n.Ack(leaseID)
+	case r.retry:
+		_, _ = n.Nack(leaseID, fsm.NackRequeueNoPenalty, WorkflowTaskRetryDelayMs, nil)
+	case r.res != nil && (r.res.Applied || r.res.Reason == "stale" || r.res.Reason == "closed"):
+		_ = n.Ack(leaseID)
+	default:
+		_, _ = n.Nack(leaseID, fsm.NackRequeueNoPenalty, WorkflowTaskRetryDelayMs, nil)
 	}
 }
 
 // driveWorkflowTask handles one leased workflow task: load the run, replay history,
-// decide, and submit through the gate (which validates OCC + prefix checksum). A
-// stale or closed-run task is a harmless no-op — a fresh task already covers the new
-// state — so it is simply acked by the caller.
-func (n *Node) driveWorkflowTask(lr *fsm.LeaseResult, decide WorkflowDecider) {
+// decide, and submit through the gate (which validates OCC + prefix checksum). It
+// returns the task's disposition. Crucially, a gate ERROR (e.g. the decider
+// returned an unknown command kind, which fails command translation) is reported
+// as retry — NOT a droppable no-op — so an invalid decision cannot silently delete
+// the task and wedge the run.
+func (n *Node) driveWorkflowTask(lr *fsm.LeaseResult, decide WorkflowDecider) wfTaskResult {
 	ref := &rotav1.WorkflowTaskRef{}
 	if proto.Unmarshal(lr.Payload, ref) != nil {
-		return
+		return wfTaskResult{drop: true} // malformed task payload: can never be processed
 	}
 	run, found := n.GetRun(ref.RunId)
 	if !found || run.Status != rotav1.WorkflowStatus_WF_RUNNING {
-		return
+		return wfTaskResult{drop: true} // stale/closed: a fresh task covers the new state
 	}
 	history, err := n.GetRunHistory(ref.RunId)
 	if err != nil {
-		return
+		return wfTaskResult{retry: true} // transient store error: don't drop
 	}
 	cmds := decide(ref.RunId, history)
 	cs, err := n.RunPrefixChecksum(ref.RunId, run.CurHistorySeq)
 	if err != nil {
-		return
+		return wfTaskResult{retry: true}
 	}
-	_, _ = n.CompleteWorkflowTask(ref.RunId, run.RunEpoch, run.CurHistorySeq, cs, cmds)
+	res, err := n.CompleteWorkflowTask(ref.RunId, run.RunEpoch, run.CurHistorySeq, cs, cmds)
+	if err != nil {
+		return wfTaskResult{retry: true} // invalid command / append error: don't drop
+	}
+	return wfTaskResult{res: res}
 }
 
 // RunActivityWorker polls activity tasks for an activity type, runs the handler, and

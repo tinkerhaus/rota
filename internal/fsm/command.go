@@ -239,6 +239,7 @@ type CompleteCmd struct {
 	TokenHash []byte            `json:"th"`
 	Success   bool              `json:"ok"`
 	Meta      map[string]string `json:"m,omitempty"`
+	DelayMs   uint64            `json:"dl,omitempty"` // on failure: redelivery delay overriding default backoff
 	NowMs     uint64            `json:"now"`
 }
 
@@ -281,6 +282,7 @@ type PublishCmd struct {
 	HasBatch      bool              `json:"hb,omitempty"`
 	MaxAttempts   uint32            `json:"ma,omitempty"`
 	NotBeforeMs   uint64            `json:"nb,omitempty"` // 0 ⇒ eligible now; else DELAYED until T
+	TtlExpiryMs   uint64            `json:"tx,omitempty"` // leader-stamped absolute TTL expiry; 0 ⇒ no TTL
 	NowMs         uint64            `json:"now,omitempty"`
 	IssueToken    bool              `json:"itk,omitempty"` // mint a completion token at lease time
 	ExternalToken []byte            `json:"etk,omitempty"` // producer-supplied completion token (optional)

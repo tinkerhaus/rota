@@ -362,7 +362,7 @@ func (f *FSM) applyComplete(b *pebble.Batch, c *CompleteCmd) (interface{}, error
 		ar, _ := r.(*AckResult)
 		return &CompleteResult{OK: ar != nil && ar.OK}, nil
 	}
-	r, err := f.applyNack(b, &NackCmd{LeaseID: leaseID, Mode: NackRetry, NowMs: c.NowMs, FailureMeta: c.Meta})
+	r, err := f.applyNack(b, &NackCmd{LeaseID: leaseID, Mode: NackRetry, DelayMs: c.DelayMs, NowMs: c.NowMs, FailureMeta: c.Meta})
 	if err != nil {
 		return nil, err
 	}

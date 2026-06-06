@@ -235,7 +235,7 @@ func (c *ControlService) ReleaseSingletonLease(ctx context.Context, req *rotav1.
 // ─── Async completion + introspection ──────────────────────────────────────────
 
 func (c *ControlService) CompleteByToken(ctx context.Context, req *rotav1.CompleteByTokenRequest) (*rotav1.CompleteResult, error) {
-	_, unknown, err := c.n.Complete(req.GetExternalToken(), req.GetOutcome() == rotav1.Outcome_SUCCESS, req.GetResultMeta())
+	_, unknown, err := c.n.Complete(req.GetExternalToken(), req.GetOutcome() == rotav1.Outcome_SUCCESS, req.GetResultMeta(), durationMs(req.GetDelay()))
 	if err != nil {
 		return nil, err
 	}

@@ -7,7 +7,20 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Control, Publisher, Worker, type Message } from "../dist/index.js";
+import {
+  Control,
+  Publisher,
+  Worker,
+  WorkflowClient,
+  runActivityWorker,
+  runWorkflowWorker,
+  scheduleActivity,
+  completeWorkflow,
+  HistoryEventType,
+  WorkflowStatus,
+  type HistoryEvent,
+  type Message,
+} from "../dist/index.js";
 import { buildBinary, haveGo, sleep, startCluster, type Cluster } from "./harness.js";
 
 const d = haveGo() ? describe : describe.skip;
@@ -79,4 +92,43 @@ d("rota cluster leader-following", () => {
 
     expect(got?.payload.toString()).toBe("stream-redirect");
   }, 20_000);
+
+  it("drives a workflow with worker poll loops pointed at a follower", async () => {
+    // The workflow/activity poll loops are leader-guarded; pointing them at a
+    // follower works only if they follow the NOT_LEADER redirect to the leader.
+    const follower = await cluster.follower();
+    const ac = new AbortController();
+    const actP = runActivityWorker(
+      follower.addr,
+      "ccharge",
+      "ca",
+      () => [Buffer.from("ok"), true],
+      { signal: ac.signal },
+    );
+    const decide = (_runId: number, history: HistoryEvent[]) => {
+      const sched = history.some((e) => e.eventType === HistoryEventType.HET_ACTIVITY_SCHEDULED);
+      const done = history.some((e) => e.eventType === HistoryEventType.HET_ACTIVITY_COMPLETED);
+      if (!sched) return [scheduleActivity("ccharge")];
+      if (done) return [completeWorkflow(Buffer.from("done"))];
+      return [];
+    };
+    const wfP = runWorkflowWorker(follower.addr, "corder", "cw", decide, { signal: ac.signal });
+
+    const client = new WorkflowClient(follower.addr);
+    try {
+      const runId = await client.startWorkflow("corder", { tenantId: "t" });
+      let status: number | undefined;
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline) {
+        status = (await client.getRun(runId)).status as number;
+        if (status === WorkflowStatus.WF_COMPLETED) break;
+        await sleep(50);
+      }
+      expect(status).toBe(WorkflowStatus.WF_COMPLETED);
+    } finally {
+      ac.abort();
+      client.close();
+      await Promise.allSettled([actP, wfP]);
+    }
+  }, 30_000);
 });

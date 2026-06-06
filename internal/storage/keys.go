@@ -34,6 +34,7 @@ const (
 	TimerDedupExpiry   byte = 0x04 // a producer dedup window closes (the row is swept)
 	TimerLeaseMaxLife  byte = 0x05 // a lease's absolute lifetime cap (survives extends)
 	TimerWFFired       byte = 0x06 // a durable workflow timer (workflow.sleep) fires
+	TimerMsgExpiry     byte = 0x07 // a message's TTL elapses while still undelivered
 )
 
 func u64be(v uint64) []byte {

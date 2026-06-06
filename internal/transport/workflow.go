@@ -113,7 +113,15 @@ func (w *WorkflowService) RespondWorkflowTask(ctx context.Context, req *rotav1.R
 	if err != nil {
 		return nil, err
 	}
-	_ = w.n.Ack(req.GetLeaseId())
+	// Consume the task only when it was applied or is no longer needed. On a
+	// validation rejection (non_determinism / checksum_required) requeue it with a
+	// delay instead of acking — acking would delete the only task while the run
+	// still has wf_task_pending=true, wedging it. See node.settleWorkflowTask.
+	if res.Applied || res.Reason == "stale" || res.Reason == "closed" {
+		_ = w.n.Ack(req.GetLeaseId())
+	} else {
+		_, _ = w.n.Nack(req.GetLeaseId(), fsm.NackRequeueNoPenalty, node.WorkflowTaskRetryDelayMs, nil)
+	}
 	return &rotav1.RespondWorkflowTaskResponse{Applied: res.Applied, Reason: res.Reason}, nil
 }
 

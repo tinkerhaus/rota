@@ -220,10 +220,9 @@ Other commands: `startTimer(ms)`, `continueAsNew(input)`, `failWorkflow(result)`
 Other client calls: `signalWorkflow`, `cancelWorkflow`, `getHistory`, `listRuns`.
 
 Activities dispatch as ordinary, fair-scheduled leases; the worker protocol is
-gRPC, so the engine inherits the broker's cross-tenant fairness.
-
-> The poll loops target a single address and do not follow the leader — point
-> them at the leader (or a single node).
+gRPC, so the engine inherits the broker's cross-tenant fairness. The workflow and
+activity poll loops follow the cluster leader on a `NOT_LEADER` fault, so a worker
+may target any node (or a seed list).
 
 ## Leader following
 

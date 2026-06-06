@@ -216,4 +216,27 @@ d("rota broker data plane", () => {
     expect(res.unknownToken).toBe(true);
     expect(res.resolved).toBe(false);
   });
+
+  it("a worker's groupAllow filter restricts which groups it leases", async () => {
+    const lane = "filtered";
+    for (let i = 0; i < 2; i++) await pub.publish(lane, "a", Buffer.from(`a${i}`));
+    for (let i = 0; i < 2; i++) await pub.publish(lane, "b", Buffer.from(`b${i}`));
+
+    const seen: string[] = [];
+    const worker = new Worker(broker.addr, lane, (m) => void seen.push(m.groupId), {
+      installSignalHandler: false,
+      groupAllow: ["a"],
+    });
+    await withWorker(worker, () => seen.length >= 2);
+
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    expect(seen.every((g) => g === "a")).toBe(true); // group b was never delivered
+  });
+
+  it("a published TTL auto-dead-letters an undelivered message", async () => {
+    const lane = "ttl-sdk";
+    await pub.publish(lane, "g", Buffer.from("expireme"), { ttl: 0.08 }); // 80ms
+    await sleep(400); // no worker: let the TTL elapse
+    expect(await dlqDepth(lane)).toBe(1);
+  });
 });

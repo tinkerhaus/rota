@@ -92,6 +92,7 @@ type PublishReq struct {
 	BatchSize     *uint32
 	NotBeforeMs   uint64
 	MaxAttempts   uint32
+	TtlMs         uint64 // 0 = no TTL; else auto-dead-letter if still undelivered by enqueue+TtlMs
 	IssueToken    bool
 	ExternalToken []byte
 	DedupKey      string // producer idempotency key; "" disables dedup
@@ -284,6 +285,9 @@ func publishCmd(r PublishReq) *fsm.PublishCmd {
 		pc.DedupKey = r.DedupKey
 		pc.DedupExpiryMs = pc.NowMs + dedupWindowMs
 	}
+	if r.TtlMs > 0 {
+		pc.TtlExpiryMs = pc.NowMs + r.TtlMs
+	}
 	return pc
 }
 
@@ -327,6 +331,13 @@ func (n *Node) PublishBatch(reqs []PublishReq, atomic bool) ([]fsm.PublishItemRe
 }
 
 func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error) {
+	return n.LeaseOneFiltered(lane, consumerID, nil, nil)
+}
+
+// LeaseOneFiltered leases the next fair message in a lane, restricted to the
+// given group filters. An empty allow list means all groups are eligible; a
+// group in deny is excluded even if also allowed.
+func (n *Node) LeaseOneFiltered(lane, consumerID string, allow, deny []string) (*fsm.LeaseResult, bool, error) {
 	n.ensurePolicy(lane)
 	if !n.laneGate(lane) {
 		return nil, false, nil // lane paused or rate-limited: backpressure
@@ -335,13 +346,37 @@ func (n *Node) LeaseOne(lane, consumerID string) (*fsm.LeaseResult, bool, error)
 	if err != nil {
 		return nil, false, err
 	}
+	var allowSet, denySet map[string]struct{}
+	if len(allow) > 0 {
+		allowSet = make(map[string]struct{}, len(allow))
+		for _, g := range allow {
+			allowSet[g] = struct{}{}
+		}
+	}
+	if len(deny) > 0 {
+		denySet = make(map[string]struct{}, len(deny))
+		for _, g := range deny {
+			denySet[g] = struct{}{}
+		}
+	}
 	active := make([]scheduler.GroupStat, 0, len(groups))
 	for _, g := range groups {
-		if g.Ready > 0 && !g.Paused {
-			active = append(active, scheduler.GroupStat{
-				ID: g.ID, Backlog: int(g.Ready), InFlight: int(g.InFlight), Weight: g.Weight,
-			})
+		if g.Ready == 0 || g.Paused {
+			continue
 		}
+		if allowSet != nil {
+			if _, ok := allowSet[g.ID]; !ok {
+				continue
+			}
+		}
+		if denySet != nil {
+			if _, ok := denySet[g.ID]; ok {
+				continue
+			}
+		}
+		active = append(active, scheduler.GroupStat{
+			ID: g.ID, Backlog: int(g.Ready), InFlight: int(g.InFlight), Weight: g.Weight,
+		})
 	}
 	if len(active) == 0 {
 		return nil, false, nil

@@ -28,7 +28,6 @@ import * as grpc from "@grpc/grpc-js";
 import {
   LeaderClient,
   loadProto,
-  normalizeTargets,
   type LeaderClientOptions,
   type Targets,
 } from "./common.js";
@@ -282,29 +281,10 @@ export interface WorkerLoopOptions {
 function makeWorkflowClient(
   targets: Targets,
   opts: WorkerLoopOptions,
-): WorkflowServiceClient {
-  const proto = loadProto();
-  const addr = normalizeTargets(targets)[0];
-  const creds = opts.credentials ?? grpc.credentials.createInsecure();
-  return new proto.rota.v1.Workflow(addr, creds, opts.channelOptions ?? {});
-}
-
-function unary<Res>(
-  client: WorkflowServiceClient,
-  method: string,
-  request: unknown,
-  timeout: number | null,
-): Promise<Res> {
-  return new Promise<Res>((resolve, reject) => {
-    const options: grpc.CallOptions = {};
-    if (timeout != null) options.deadline = Date.now() + timeout * 1000;
-    const fn = (client as unknown as Record<string, unknown>)[method] as (
-      ...a: unknown[]
-    ) => void;
-    fn.call(client, request, options, (err: grpc.ServiceError | null, resp: Res) => {
-      if (err) reject(err);
-      else resolve(resp);
-    });
+): LeaderClient<WorkflowServiceClient> {
+  return new LeaderClient(targets, loadProto().rota.v1.Workflow, {
+    channelOptions: opts.channelOptions,
+    credentials: opts.credentials,
   });
 }
 
@@ -314,10 +294,8 @@ function unary<Res>(
  * Each iteration leases one workflow task, replays the committed history, calls
  * ``decide(runId, history)``, computes the prefix checksum over that SAME
  * history (so the leader's determinism gate accepts the decision), and submits
- * the commands. Resolves when the loop stops.
- *
- * NOTE: like the reference SDK, the poll loop targets a single address and does
- * not follow the leader — point it at the leader (or a single node).
+ * the commands. Resolves when the loop stops. Poll/respond calls follow the
+ * cluster leader on a NOT_LEADER fault, so the worker may target any node.
  */
 export async function runWorkflowWorker(
   targets: Targets,
@@ -334,7 +312,7 @@ export async function runWorkflowWorker(
     while (!stopped()) {
       let task: PolledWorkflowTask__Output;
       try {
-        task = await unary<PolledWorkflowTask__Output>(client, "PollWorkflowTask", req, timeout);
+        task = await client.call<PolledWorkflowTask__Output>("PollWorkflowTask", req, { timeout });
       } catch {
         if (stopped()) break;
         await sleep(POLL_IDLE_SLEEP_MS);
@@ -347,14 +325,14 @@ export async function runWorkflowWorker(
       const history = task.history ?? [];
       const checksum = prefixChecksum(history);
       const commands = (await decide(task.runId, history)) ?? [];
-      await unary(client, "RespondWorkflowTask", {
+      await client.call("RespondWorkflowTask", {
         runId: task.runId,
         leaseId: task.leaseId,
         runEpoch: task.runEpoch,
         historySeq: task.historySeq,
         prefixChecksum: checksum,
         commands: commands.map(commandToProto),
-      }, timeout);
+      }, { timeout });
     }
   } finally {
     client.close();
@@ -384,7 +362,7 @@ export async function runActivityWorker(
     while (!stopped()) {
       let polled: PolledActivityTask__Output;
       try {
-        polled = await unary<PolledActivityTask__Output>(client, "PollActivityTask", req, timeout);
+        polled = await client.call<PolledActivityTask__Output>("PollActivityTask", req, { timeout });
       } catch {
         if (stopped()) break;
         await sleep(POLL_IDLE_SLEEP_MS);
@@ -403,13 +381,13 @@ export async function runActivityWorker(
         result = Buffer.alloc(0);
         success = false;
       }
-      await unary(client, "RespondActivityTask", {
+      await client.call("RespondActivityTask", {
         runId: task.runId,
         leaseId: task.leaseId,
         scheduledEventId: task.scheduledEventId,
         success,
         result: result ?? Buffer.alloc(0),
-      }, timeout);
+      }, { timeout });
     }
   } finally {
     client.close();
