@@ -8,6 +8,7 @@ import (
 	"time"
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
+	"github.com/tinkerhaus/rota/internal/node"
 )
 
 // ─── Fairness Observatory routes ────────────────────────────────────────────────
@@ -29,6 +30,9 @@ func (s *server) fairness(w http.ResponseWriter, r *http.Request, lane string) {
 	if !get(w, r) {
 		return
 	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
+		return
+	}
 	resp, err := s.control.GetLaneFairness(r.Context(), &rotav1.LaneRef{Lane: lane})
 	writeProto(w, resp, err)
 }
@@ -36,6 +40,9 @@ func (s *server) fairness(w http.ResponseWriter, r *http.Request, lane string) {
 // policyHealth serves the lane's scheduling-policy health.
 func (s *server) policyHealth(w http.ResponseWriter, r *http.Request, lane string) {
 	if !get(w, r) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
 		return
 	}
 	resp, err := s.control.GetPolicyHealth(r.Context(), &rotav1.LaneRef{Lane: lane})
@@ -64,6 +71,9 @@ type shareEntry struct {
 // non-blocking nudge into a buffered channel.
 func (s *server) fairnessStream(w http.ResponseWriter, r *http.Request, lane string) {
 	if !get(w, r) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
 		return
 	}
 	flusher, ok := w.(http.Flusher)

@@ -29,6 +29,7 @@ const (
 	CmdWFCompleteActivity
 	CmdWFSignal
 	CmdWFCancel
+	CmdAuthPrincipal
 )
 
 type GroupOp uint8
@@ -55,6 +56,16 @@ const (
 	SingletonAcquire SingletonOp = iota
 	SingletonRenew
 	SingletonRelease
+)
+
+type AuthPrincipalOp uint8
+
+const (
+	AuthCreatePrincipal AuthPrincipalOp = iota
+	AuthRotatePrincipalToken
+	AuthSetPrincipalDisabled
+	AuthGrantPrincipal
+	AuthRevokePrincipalGrant
 )
 
 // NackMode mirrors rota.v1.NackMode.
@@ -93,6 +104,28 @@ type Command struct {
 	WFCompleteActivity *WFCompleteActivityCmd `json:"wfca,omitempty"`
 	WFSignal           *WFSignalCmd           `json:"wfsig,omitempty"`
 	WFCancel           *WFCancelCmd           `json:"wfcan,omitempty"`
+	AuthPrincipal      *AuthPrincipalCmd      `json:"auth,omitempty"`
+}
+
+type AuthGrantCmd struct {
+	LanePattern  string  `json:"lane,omitempty"`
+	GroupPattern string  `json:"group,omitempty"`
+	Actions      []int32 `json:"actions,omitempty"`
+	Note         string  `json:"note,omitempty"`
+}
+
+type AuthPrincipalCmd struct {
+	Op         AuthPrincipalOp `json:"op"`
+	Name       string          `json:"name"`
+	Tags       []string        `json:"tags,omitempty"`
+	Grants     []AuthGrantCmd  `json:"grants,omitempty"`
+	Grant      *AuthGrantCmd   `json:"grant,omitempty"`
+	GrantIndex uint32          `json:"grant_index,omitempty"`
+	Disabled   bool            `json:"disabled,omitempty"`
+	TokenID    string          `json:"token_id,omitempty"`
+	Salt       []byte          `json:"salt,omitempty"`
+	TokenHash  []byte          `json:"token_hash,omitempty"`
+	NowMs      uint64          `json:"now"`
 }
 
 // WFCancelCmd terminally cancels a running run: it appends WORKFLOW_CANCELED and

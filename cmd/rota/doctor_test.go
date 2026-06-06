@@ -173,6 +173,28 @@ func TestBenchPublishesAndDrains(t *testing.T) {
 	}
 }
 
+func TestSoakPublishesAndDrains(t *testing.T) {
+	addr, _, _, _ := startCLITestServer(t)
+	report, err := runSoak(soakOptions{
+		clientOptions: clientOptions{grpcAddr: addr, timeout: 10 * time.Second},
+		duration:      300 * time.Millisecond,
+		drain:         300 * time.Millisecond,
+		lanePrefix:    "soak-test",
+		lanes:         1,
+		groups:        2,
+		publishers:    1,
+		workers:       2,
+		publishRate:   20,
+		payloadBytes:  16,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Published == 0 || report.Leased == 0 || report.Acked == 0 {
+		t.Fatalf("soak report = %+v, want published/leased/acked > 0", report)
+	}
+}
+
 func TestDoctorJSONRenderer(t *testing.T) {
 	report := &doctorReport{
 		CheckedAtMs: 1,

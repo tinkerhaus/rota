@@ -56,8 +56,12 @@ func main() {
 		err = cmdMessages(os.Args[2:])
 	case "bench":
 		err = cmdBench(os.Args[2:])
+	case "soak":
+		err = cmdSoak(os.Args[2:])
 	case "backup":
 		err = cmdBackup(os.Args[2:])
+	case "auth":
+		err = cmdAuth(os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, "unknown command:", os.Args[1])
 		fmt.Fprintln(os.Stderr, rootUsage())
@@ -83,7 +87,9 @@ commands:
   leases      list in-flight leases
   messages    peek messages in a group
   bench       publish and drain a load-test workload
-  backup      create or restore an offline data-directory archive`
+  soak        run a long-lived load/chaos exercise
+  backup      create, restore, or validate an offline data-directory archive
+  auth        manage replicated principals, tokens, and grants`
 }
 
 func cmdServe(args []string) error {
@@ -92,7 +98,10 @@ func cmdServe(args []string) error {
 	metricsAddr := "127.0.0.1:7101"
 	webDir := "web/dist"
 	var peers, grpcPeers string
-	var authToken, tlsCert, tlsKey, clientCA string
+	var bootstrapAdminToken, bootstrapAdminTokenFile, bootstrapAdminEnv, bootstrapAdminPrincipal string
+	var tlsCert, tlsKey, clientCA string
+	bootstrapAdminEnv = "ROTA_BOOTSTRAP_ADMIN_TOKEN"
+	bootstrapAdminPrincipal = node.BootstrapAdminPrincipal
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
 		case "--data":
@@ -113,8 +122,14 @@ func cmdServe(args []string) error {
 			peers = args[i+1] // id1=raftaddr1,id2=raftaddr2,...
 		case "--grpc-peers":
 			grpcPeers = args[i+1] // id1=grpcaddr1,id2=grpcaddr2,...
-		case "--auth-token":
-			authToken = args[i+1]
+		case "--bootstrap-admin-token":
+			bootstrapAdminToken = args[i+1]
+		case "--bootstrap-admin-token-file":
+			bootstrapAdminTokenFile = args[i+1]
+		case "--bootstrap-admin-env":
+			bootstrapAdminEnv = args[i+1]
+		case "--bootstrap-admin-principal":
+			bootstrapAdminPrincipal = args[i+1]
 		case "--tls-cert":
 			tlsCert = args[i+1]
 		case "--tls-key":
@@ -142,6 +157,18 @@ func cmdServe(args []string) error {
 	if err := n.WaitClusterLeader(15 * time.Second); err != nil {
 		return err
 	}
+	adminToken, err := bootstrapToken(bootstrapAdminToken, bootstrapAdminTokenFile, bootstrapAdminEnv)
+	if err != nil {
+		return err
+	}
+	if err := n.BootstrapAuthAdmin(bootstrapAdminPrincipal, adminToken); err != nil {
+		return err
+	}
+	if adminToken != "" {
+		if err := waitAuthEnabled(n, 15*time.Second); err != nil {
+			return err
+		}
+	}
 	registerNodeHealthMetrics(n)
 
 	lis, err := net.Listen("tcp", addr)
@@ -155,8 +182,8 @@ func cmdServe(args []string) error {
 		grpcOpts = append(grpcOpts, grpc.Creds(creds))
 	}
 	grpcOpts = append(grpcOpts,
-		grpc.ChainUnaryInterceptor(transport.AuthUnaryInterceptor(authToken), transport.LeaderGuardInterceptor(n)),
-		grpc.ChainStreamInterceptor(transport.AuthStreamInterceptor(authToken)),
+		grpc.ChainUnaryInterceptor(transport.AuthUnaryInterceptor(n), transport.LeaderGuardInterceptor(n)),
+		grpc.ChainStreamInterceptor(transport.AuthStreamInterceptor(n)),
 	)
 	srv := grpc.NewServer(grpcOpts...)
 	rotav1.RegisterBrokerServer(srv, transport.NewBroker(n))

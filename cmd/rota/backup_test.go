@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/tinkerhaus/rota/internal/node"
 )
 
 func TestBackupCreateAndRestore(t *testing.T) {
@@ -63,5 +66,41 @@ func TestBackupRestoreRefusesNonEmptyTarget(t *testing.T) {
 	}
 	if err := restoreBackupArchive(archive, dst, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBackupValidateRestoredNodeState(t *testing.T) {
+	root := t.TempDir()
+	data := filepath.Join(root, "node")
+	n, err := node.Open(node.Config{DataDir: data, NodeID: "backup-validate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := n.WaitLeader(5 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := n.CreateAuthPrincipal("dashboard", []string{"dashboard"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.Publish(node.PublishReq{Lane: "backup", GroupID: "g", Payload: []byte("work")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(root, "backup.tar.gz")
+	if err := createBackupArchive(data, archive); err != nil {
+		t.Fatal(err)
+	}
+	report, cleanup, err := validateBackupArchive(archive, "", false)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.OK || report.Messages == 0 || report.Groups == 0 || report.AuthPrincipals != 1 {
+		t.Fatalf("validation report = %+v", report)
 	}
 }

@@ -11,7 +11,7 @@ import "testing"
 var appTableTags = []byte{
 	tagMeta, tagMessage, tagGroupMeta, tagLease, tagTimeIndex, tagDLQ,
 	tagPolicy, tagCron, tagSingleton, tagToken, tagLaneConfig, tagDedup,
-	tagWFRun, tagWFHistory, tagWFActivityDn,
+	tagWFRun, tagWFHistory, tagWFActivityDn, tagAuthPrincipal,
 }
 
 func TestAppKeyspaceBoundsCoverAllAppTags(t *testing.T) {

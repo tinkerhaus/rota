@@ -6,23 +6,24 @@ package storage
 import "encoding/binary"
 
 const (
-	tagMeta         byte = 0x00
-	tagMessage      byte = 0x01
-	tagGroupMeta    byte = 0x02
-	tagLease        byte = 0x03
-	tagTimeIndex    byte = 0x04
-	tagDLQ          byte = 0x05
-	tagPolicy       byte = 0x06
-	tagCron         byte = 0x07
-	tagSingleton    byte = 0x08
-	tagToken        byte = 0x09
-	tagLaneConfig   byte = 0x0A
-	tagDedup        byte = 0x0B // producer-side idempotency window: dedup_key -> msg id
-	tagWFRun        byte = 0x0C // durable-execution run record (RunMeta)
-	tagWFHistory    byte = 0x0D // durable-execution per-run event history (append-only)
-	tagWFActivityDn byte = 0x0E // per-activity completion done-marker (scheduled_event_id dedup)
-	tagRaftLog      byte = 0xFE
-	tagRaftKV       byte = 0xFF
+	tagMeta          byte = 0x00
+	tagMessage       byte = 0x01
+	tagGroupMeta     byte = 0x02
+	tagLease         byte = 0x03
+	tagTimeIndex     byte = 0x04
+	tagDLQ           byte = 0x05
+	tagPolicy        byte = 0x06
+	tagCron          byte = 0x07
+	tagSingleton     byte = 0x08
+	tagToken         byte = 0x09
+	tagLaneConfig    byte = 0x0A
+	tagDedup         byte = 0x0B // producer-side idempotency window: dedup_key -> msg id
+	tagWFRun         byte = 0x0C // durable-execution run record (RunMeta)
+	tagWFHistory     byte = 0x0D // durable-execution per-run event history (append-only)
+	tagWFActivityDn  byte = 0x0E // per-activity completion done-marker (scheduled_event_id dedup)
+	tagAuthPrincipal byte = 0x0F // replicated auth principal, grants, and token hash
+	tagRaftLog       byte = 0xFE
+	tagRaftKV        byte = 0xFF
 )
 
 // Timer kinds carried in the time index. The same ordered structure drives
@@ -83,6 +84,9 @@ func MessagePrefix(lane, group string) []byte {
 	return append(k, lp(group)...)
 }
 
+// MessageBounds returns the [lo, hi) range over ALL messages.
+func MessageBounds() (lo, hi []byte) { return []byte{tagMessage}, []byte{tagMessage + 1} }
+
 // GroupMetaKey: 0x02 ++ LP(lane) ++ LP(group)
 func GroupMetaKey(lane, group string) []byte {
 	k := []byte{tagGroupMeta}
@@ -119,7 +123,8 @@ func TimeIndexKey(dueTs uint64, kind byte, ref []byte) []byte {
 }
 
 // TimeIndexPrefix / TimeIndexUpTo bound a sweep of all timers due at or before ts.
-func TimeIndexPrefix() []byte { return []byte{tagTimeIndex} }
+func TimeIndexPrefix() []byte          { return []byte{tagTimeIndex} }
+func TimeIndexBounds() (lo, hi []byte) { return []byte{tagTimeIndex}, []byte{tagTimeIndex + 1} }
 func TimeIndexUpTo(ts uint64) []byte {
 	return append([]byte{tagTimeIndex}, u64be(ts+1)...)
 }
@@ -173,6 +178,9 @@ func DLQLanePrefix(lane string) []byte {
 	k := []byte{tagDLQ}
 	return append(k, lp(lane)...)
 }
+
+// DLQBounds returns the [lo, hi) range over ALL dead letters.
+func DLQBounds() (lo, hi []byte) { return []byte{tagDLQ}, []byte{tagDLQ + 1} }
 
 // DLQGroupPrefix: all dead letters for a (lane, group). The dead_ts is part of
 // the key (so a single msg id cannot be addressed directly), so a redrive scans
@@ -265,13 +273,23 @@ func WFActivityDoneKey(runID, schedEventID uint64) []byte {
 	return append(k, u64be(schedEventID)...)
 }
 
+// AuthPrincipalKey: 0x0F ++ LP(name) — replicated principal record.
+func AuthPrincipalKey(name string) []byte {
+	return append([]byte{tagAuthPrincipal}, lp(name)...)
+}
+
+// AuthPrincipalBounds returns the [lo, hi) range over every auth principal.
+func AuthPrincipalBounds() (lo, hi []byte) {
+	return []byte{tagAuthPrincipal}, []byte{tagAuthPrincipal + 1}
+}
+
 // AppKeyspaceBounds returns the [lo, hi) range covering all application tables
 // (everything EXCEPT the raft log/stable store at 0xFE/0xFF). Used by FSM
 // snapshots so a snapshot/restore never clobbers a node's own raft log.
 //
 // INVARIANT: every application table tag must fall inside [lo, hi). When you add
 // a tag, bump the upper bound here — TestAppKeyspaceBoundsCoverAllAppTags enforces it.
-func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagWFActivityDn + 1} }
+func AppKeyspaceBounds() (lo, hi []byte) { return []byte{tagMeta}, []byte{tagAuthPrincipal + 1} }
 
 // CronDueRef / ParseCronDueRef encode a cron timer's target spec.
 func CronDueRef(cronID string) []byte   { return []byte(cronID) }

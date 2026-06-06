@@ -12,13 +12,13 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Rota" }]
 keywords = ["rota", "broker", "grpc", "queue", "fair-scheduling", "message-broker"]
 dependencies = [
-    "grpcio>=1.60",
-    "protobuf>=4.25",
+    "grpcio>=1.81.0",
+    "protobuf>=6.33.5",
 ]
 
 [project.optional-dependencies]
 # Needed only to regenerate the gRPC stubs from the proto.
-codegen = ["grpcio-tools>=1.60"]
+codegen = ["grpcio-tools>=1.81.0"]
 dev = ["pytest>=7"]
 
 [tool.pytest.ini_options]

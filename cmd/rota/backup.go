@@ -3,23 +3,31 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/pebble"
+
+	"github.com/tinkerhaus/rota/internal/storage"
 )
 
 func cmdBackup(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: rota backup <create|restore> [flags]")
+		return fmt.Errorf("usage: rota backup <create|restore|validate> [flags]")
 	}
 	switch args[0] {
 	case "create":
 		return cmdBackupCreate(args[1:])
 	case "restore":
 		return cmdBackupRestore(args[1:])
+	case "validate":
+		return cmdBackupValidate(args[1:])
 	default:
 		return fmt.Errorf("unknown backup command %q", args[0])
 	}
@@ -63,6 +71,121 @@ func cmdBackupRestore(args []string) error {
 	}
 	fmt.Fprintf(os.Stdout, "backup restored in=%s data=%s\n", inPath, dataDir)
 	return nil
+}
+
+type backupValidationReport struct {
+	Archive        string `json:"archive"`
+	RestoreDir     string `json:"restore_dir"`
+	Temporary      bool   `json:"temporary"`
+	OK             bool   `json:"ok"`
+	Files          int    `json:"files"`
+	AppliedIndex   uint64 `json:"applied_index"`
+	Messages       int    `json:"messages"`
+	Groups         int    `json:"groups"`
+	Leases         int    `json:"leases"`
+	DeadLetters    int    `json:"dead_letters"`
+	Timers         int    `json:"timers"`
+	WorkflowRuns   int    `json:"workflow_runs"`
+	AuthPrincipals int    `json:"auth_principals"`
+}
+
+func cmdBackupValidate(args []string) error {
+	var inPath, restoreDir string
+	var force, asJSON bool
+	fs := flag.NewFlagSet("backup validate", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&inPath, "in", "", "input .tar.gz backup")
+	fs.StringVar(&restoreDir, "restore-dir", "", "directory to restore into for validation; omitted uses a temporary directory")
+	fs.BoolVar(&force, "force", false, "allow restoring into a non-empty --restore-dir")
+	fs.BoolVar(&asJSON, "json", false, "emit JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if inPath == "" {
+		return fmt.Errorf("--in is required")
+	}
+	report, cleanup, err := validateBackupArchive(inPath, restoreDir, force)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		return err
+	}
+	return writeBackupValidationReport(os.Stdout, report, asJSON)
+}
+
+func validateBackupArchive(inPath, restoreDir string, force bool) (*backupValidationReport, func(), error) {
+	temp := false
+	cleanup := func() {}
+	if restoreDir == "" {
+		dir, err := os.MkdirTemp("", "rota-backup-validate-*")
+		if err != nil {
+			return nil, nil, err
+		}
+		restoreDir = dir
+		temp = true
+		cleanup = func() { _ = os.RemoveAll(dir) }
+	}
+	if err := restoreBackupArchive(inPath, restoreDir, force); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	report := &backupValidationReport{Archive: inPath, RestoreDir: restoreDir, Temporary: temp}
+	files, err := countRegularFiles(restoreDir)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	report.Files = files
+	st, err := storage.Open(restoreDir)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	failAfterOpen := func(err error) (*backupValidationReport, func(), error) {
+		_ = st.Close()
+		cleanup()
+		return nil, nil, err
+	}
+	if raw, ok, err := st.GetRaw(storage.MetaKey("applied_index")); err != nil {
+		return failAfterOpen(err)
+	} else if ok && len(raw) >= 8 {
+		report.AppliedIndex = binary.BigEndian.Uint64(raw[:8])
+	}
+	lo, hi := storage.MessageBounds()
+	if report.Messages, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.GroupMetaBounds()
+	if report.Groups, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.LeaseBounds()
+	if report.Leases, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.DLQBounds()
+	if report.DeadLetters, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.TimeIndexBounds()
+	if report.Timers, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.WFRunBounds()
+	if report.WorkflowRuns, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	lo, hi = storage.AuthPrincipalBounds()
+	if report.AuthPrincipals, err = countRange(st.DB, lo, hi); err != nil {
+		return failAfterOpen(err)
+	}
+	if err := st.Close(); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	report.OK = true
+	return report, cleanup, nil
 }
 
 func createBackupArchive(dataDir, outPath string) error {
@@ -128,6 +251,53 @@ func createBackupArchive(dataDir, outPath string) error {
 		_, err = io.Copy(tw, in)
 		return err
 	})
+}
+
+func countRegularFiles(root string) (int, error) {
+	n := 0
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root || d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			n++
+		}
+		return nil
+	})
+	return n, err
+}
+
+func countRange(db *pebble.DB, lo, hi []byte) (int, error) {
+	it, err := db.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return 0, err
+	}
+	defer it.Close()
+	n := 0
+	for it.First(); it.Valid(); it.Next() {
+		n++
+	}
+	return n, nil
+}
+
+func writeBackupValidationReport(w io.Writer, report *backupValidationReport, asJSON bool) error {
+	if asJSON {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+	fmt.Fprintf(w, "backup validation ok=%t archive=%s restore_dir=%s\n", report.OK, report.Archive, report.RestoreDir)
+	fmt.Fprintf(w, "files=%d applied_index=%d\n", report.Files, report.AppliedIndex)
+	fmt.Fprintf(w, "keys: messages=%d groups=%d leases=%d dlq=%d timers=%d workflows=%d auth_principals=%d\n",
+		report.Messages, report.Groups, report.Leases, report.DeadLetters, report.Timers, report.WorkflowRuns, report.AuthPrincipals)
+	return nil
 }
 
 func restoreBackupArchive(inPath, dataDir string, force bool) error {

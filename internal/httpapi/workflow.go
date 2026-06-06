@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
+	"github.com/tinkerhaus/rota/internal/node"
 )
 
 // workflows dispatches the durable-execution dashboard routes:
@@ -39,9 +40,15 @@ func (s *server) workflows(w http.ResponseWriter, r *http.Request) {
 	ref := &rotav1.WorkflowRunRef{RunId: id}
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodGet:
+		if !s.authorizeWorkflowRun(w, r, rotav1.AuthAction_AUTH_READ, id) {
+			return
+		}
 		resp, err := s.wf.GetWorkflowRun(r.Context(), ref)
 		writeProto(w, resp, err)
 	case len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet:
+		if !s.authorizeWorkflowRun(w, r, rotav1.AuthAction_AUTH_READ, id) {
+			return
+		}
 		resp, err := s.wf.GetWorkflowHistory(r.Context(), ref)
 		writeProto(w, resp, err)
 	case len(parts) == 2 && parts[1] == "signal" && r.Method == http.MethodPost:
@@ -54,6 +61,9 @@ func (s *server) workflows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listWorkflowRuns(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ}}) {
+		return
+	}
 	req := &rotav1.ListWorkflowRunsRequest{
 		PageSize:  parseU32(r.URL.Query().Get("page_size")),
 		PageToken: r.URL.Query().Get("page_token"),
@@ -80,6 +90,9 @@ func (s *server) startWorkflow(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_WORKFLOW, Lane: body.WorkflowType, Group: body.TenantID}}) {
+		return
+	}
 	resp, err := s.wf.StartWorkflow(r.Context(), &rotav1.StartWorkflowRequest{
 		WorkflowType: body.WorkflowType, TenantId: body.TenantID, Input: []byte(body.Input),
 	})
@@ -97,6 +110,9 @@ func (s *server) signalWorkflow(w http.ResponseWriter, r *http.Request, id uint6
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if !s.authorizeWorkflowRun(w, r, rotav1.AuthAction_AUTH_WORKFLOW, id) {
+		return
+	}
 	resp, err := s.wf.SignalWorkflow(r.Context(), &rotav1.SignalWorkflowRequest{
 		RunId: id, SignalName: body.SignalName, Payload: []byte(body.Payload),
 	})
@@ -107,8 +123,19 @@ func (s *server) cancelWorkflow(w http.ResponseWriter, r *http.Request, id uint6
 	if !s.requireLeader(w) {
 		return
 	}
+	if !s.authorizeWorkflowRun(w, r, rotav1.AuthAction_AUTH_WORKFLOW, id) {
+		return
+	}
 	resp, err := s.wf.CancelWorkflow(r.Context(), &rotav1.CancelWorkflowRequest{
 		RunId: id, Reason: []byte(r.URL.Query().Get("reason")),
 	})
 	writeProto(w, resp, err)
+}
+
+func (s *server) authorizeWorkflowRun(w http.ResponseWriter, r *http.Request, action rotav1.AuthAction, id uint64) bool {
+	run, ok := s.n.GetRun(id)
+	if !ok {
+		return s.authorize(w, r, []node.AuthCheck{{Action: action}})
+	}
+	return s.authorize(w, r, []node.AuthCheck{{Action: action, Lane: run.GetWorkflowType(), Group: run.GetTenantId()}})
 }

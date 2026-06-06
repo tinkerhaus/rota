@@ -26,7 +26,7 @@ dedicated helper; dashboard/CLI = intentionally outside the SDK.
 | Leader following for unary RPCs | yes | yes | retries `NOT_LEADER` against advertised leader |
 | Leader following for work streams | yes | yes | stream redirect handling |
 | TLS channel credentials | yes | yes | pass native gRPC credentials |
-| Static auth token metadata | yes | yes | `auth_token=` / `{ authToken }` |
+| Replicated auth bearer token metadata | yes | yes | `auth_token=` / `{ authToken }` |
 | Extra per-call metadata | yes | yes | `metadata=` / `{ metadata }` |
 | Group config and lifecycle | yes | yes | set/get/pause/resume/cancel/purge/reap/teardown |
 | Lane rate limit and pause/resume | yes | yes | control plane |
@@ -39,6 +39,7 @@ dedicated helper; dashboard/CLI = intentionally outside the SDK.
 | Workflow worker loop | yes | yes | computes prefix checksum before responding |
 | Activity worker loop | yes | yes | reports result/failure into history |
 | Workflow commands | yes | yes | activity, timer, continue-as-new, complete, fail |
+| Auth principal administration | CLI | CLI | `rota auth`; app SDKs only need bearer-token metadata |
 | List groups / leases / DLQ | dashboard/CLI | dashboard/CLI | served by HTTP/JSON dashboard routes and `rota` CLI |
 | Peek messages / redrive DLQ | dashboard/CLI | dashboard/CLI | operational surface, not app SDK |
 | Fairness observatory and policy health reads | dashboard/CLI | dashboard/CLI | dashboard visualization surface |
