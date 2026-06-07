@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -188,6 +189,10 @@ func (n *Node) registerToken(leaseID uint64, token []byte) error {
 
 func (n *Node) Complete(token []byte, success bool, meta map[string]string, delayMs uint64) (deadLettered, unknown bool, err error) {
 	h := sha256.Sum256(token)
+	lane := ""
+	if leaseID := n.leaseIDForTokenHash(h[:]); leaseID != 0 {
+		lane = n.leaseLaneForMetrics(leaseID)
+	}
 	res, e := n.apply(fsm.Command{Type: fsm.CmdComplete, Complete: &fsm.CompleteCmd{
 		TokenHash: h[:], Success: success, Meta: meta, DelayMs: delayMs, NowMs: nowMs(),
 	}})
@@ -195,9 +200,31 @@ func (n *Node) Complete(token []byte, success bool, meta map[string]string, dela
 		return false, false, e
 	}
 	if r, ok := res.(*fsm.CompleteResult); ok {
+		if r.OK {
+			if success {
+				observe.Acks.Inc()
+				if lane != "" {
+					n.meter.incAck(lane)
+				}
+			} else {
+				observe.Nacks.WithLabelValues("retry").Inc()
+				if r.DeadLettered {
+					observe.DeadLetters.Inc()
+					observe.DeadLettersByReason.WithLabelValues("max_attempts").Inc()
+				}
+			}
+		}
 		return r.DeadLettered, r.Unknown, nil
 	}
 	return false, false, nil
+}
+
+func (n *Node) leaseIDForTokenHash(hash []byte) uint64 {
+	raw, ok, _ := n.store.GetRaw(storage.TokenKey(hash))
+	if !ok || len(raw) < 8 {
+		return 0
+	}
+	return binary.BigEndian.Uint64(raw[:8])
 }
 
 // ─── Singleton leases (cluster-wide single-instance coordination) ──────────────
@@ -359,6 +386,7 @@ func (n *Node) RedriveDeadLetter(lane, group string, msgID uint64) (bool, uint64
 	if r, ok := res.(*fsm.RedriveResult); ok {
 		if r.OK {
 			observe.Publishes.Inc() // a redrive enqueues a fresh message
+			n.meter.incPublish(lane)
 		}
 		return r.OK, r.NewMsgID, nil
 	}

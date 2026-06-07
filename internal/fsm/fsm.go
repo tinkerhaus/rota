@@ -108,6 +108,8 @@ func (f *FSM) Apply(l *raft.Log) interface{} {
 		res, err = f.applyWFSignal(b, cmd.WFSignal)
 	case CmdWFCancel:
 		res, err = f.applyWFCancel(b, cmd.WFCancel)
+	case CmdAuthPrincipal:
+		res, err = f.applyAuthPrincipal(b, cmd.AuthPrincipal)
 	default:
 		// Unknown CmdType: this binary is older than the command set already
 		// committed to the log (a mixed-version rollout, or a downgrade). The old

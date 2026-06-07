@@ -179,6 +179,8 @@ class WorkflowClient:
         max_retries: int = 5,
         channel_options: Optional[Sequence] = None,
         credentials=None,
+        metadata=None,
+        auth_token: Optional[str] = None,
     ):
         self._timeout = timeout
         self._client = LeaderClient(
@@ -187,6 +189,8 @@ class WorkflowClient:
             channel_options=channel_options,
             max_retries=max_retries,
             credentials=credentials,
+            metadata=metadata,
+            auth_token=auth_token,
         )
 
     def _call(self, method: str, request):
@@ -285,6 +289,8 @@ def run_workflow_worker(
     stop_event: Optional[threading.Event] = None,
     channel_options: Optional[Sequence] = None,
     credentials=None,
+    metadata=None,
+    auth_token: Optional[str] = None,
     timeout: Optional[float] = 30.0,
 ) -> None:
     """Run the workflow-task poll/decide/respond loop until ``stop_event`` is set.
@@ -308,6 +314,8 @@ def run_workflow_worker(
         pb_grpc.WorkflowStub,
         channel_options=channel_options,
         credentials=credentials,
+        metadata=metadata,
+        auth_token=auth_token,
     )
     req = pb.PollTaskRequest(task_type=workflow_type, consumer_id=consumer_id)
     try:
@@ -357,6 +365,8 @@ def run_activity_worker(
     stop_event: Optional[threading.Event] = None,
     channel_options: Optional[Sequence] = None,
     credentials=None,
+    metadata=None,
+    auth_token: Optional[str] = None,
     timeout: Optional[float] = 30.0,
 ) -> None:
     """Run the activity-task poll/handle/respond loop until ``stop_event`` is set.
@@ -379,6 +389,8 @@ def run_activity_worker(
         pb_grpc.WorkflowStub,
         channel_options=channel_options,
         credentials=credentials,
+        metadata=metadata,
+        auth_token=auth_token,
     )
     req = pb.PollTaskRequest(task_type=activity_type, consumer_id=consumer_id)
     try:

@@ -243,7 +243,7 @@ func (c *ControlService) CompleteByToken(ctx context.Context, req *rotav1.Comple
 }
 
 func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsRequest) (*rotav1.StatsResponse, error) {
-	stats, err := c.n.Stats(req.GetLane())
+	stats, err := c.n.Stats(req.GetLane(), req.GetGroupId())
 	if err != nil {
 		return nil, err
 	}
@@ -251,11 +251,11 @@ func (c *ControlService) GetStats(ctx context.Context, req *rotav1.GetStatsReque
 	for _, s := range stats {
 		// publish_rate/lease_rate are smoothed (EWMA) events/sec from the leader's
 		// per-lane meter; depths are a point-in-time aggregate over group metadata.
-		// ack_rate/oldest_age_ms remain 0 (not yet metered).
 		resp.Lanes = append(resp.Lanes, &rotav1.LaneStats{
 			Lane: s.Lane, Leasable: s.Leasable, Delayed: s.Delayed, Inflight: s.Inflight,
 			DlqDepth: s.DLQ, GroupCount: s.GroupCount, PolicyVersion: s.PolicyVersion,
-			PublishRate: s.PublishRate, LeaseRate: s.LeaseRate,
+			PublishRate: s.PublishRate, LeaseRate: s.LeaseRate, AckRate: s.AckRate,
+			OldestAgeMs: s.OldestAgeMs,
 		})
 	}
 	return resp, nil
@@ -307,6 +307,57 @@ func (c *ControlService) RedriveDeadLetter(ctx context.Context, req *rotav1.Redr
 		return nil, err
 	}
 	return &rotav1.RedriveDeadLetterResponse{Ok: ok, NewMsgId: newID}, nil
+}
+
+// ─── Auth administration ───────────────────────────────────────────────────────
+
+func (c *ControlService) CreatePrincipal(ctx context.Context, req *rotav1.CreatePrincipalRequest) (*rotav1.CreatePrincipalResponse, error) {
+	p, token, err := c.n.CreateAuthPrincipal(req.GetName(), req.GetTags(), req.GetGrants())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &rotav1.CreatePrincipalResponse{Principal: p, Token: token}, nil
+}
+
+func (c *ControlService) RotatePrincipalToken(ctx context.Context, req *rotav1.RotatePrincipalTokenRequest) (*rotav1.RotatePrincipalTokenResponse, error) {
+	p, token, err := c.n.RotateAuthPrincipalToken(req.GetName())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &rotav1.RotatePrincipalTokenResponse{Principal: p, Token: token}, nil
+}
+
+func (c *ControlService) SetPrincipalDisabled(ctx context.Context, req *rotav1.SetPrincipalDisabledRequest) (*rotav1.AuthOpResult, error) {
+	if err := c.n.SetAuthPrincipalDisabled(req.GetName(), req.GetDisabled()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &rotav1.AuthOpResult{Ok: true}, nil
+}
+
+func (c *ControlService) GrantPrincipal(ctx context.Context, req *rotav1.GrantPrincipalRequest) (*rotav1.AuthOpResult, error) {
+	if err := c.n.GrantAuthPrincipal(req.GetName(), req.GetGrant()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &rotav1.AuthOpResult{Ok: true}, nil
+}
+
+func (c *ControlService) RevokePrincipalGrant(ctx context.Context, req *rotav1.RevokePrincipalGrantRequest) (*rotav1.AuthOpResult, error) {
+	if err := c.n.RevokeAuthPrincipalGrant(req.GetName(), req.GetGrantIndex()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &rotav1.AuthOpResult{Ok: true}, nil
+}
+
+func (c *ControlService) ListPrincipals(ctx context.Context, req *rotav1.ListPrincipalsRequest) (*rotav1.ListPrincipalsResponse, error) {
+	enabled, err := c.n.AuthEnabled()
+	if err != nil {
+		return nil, err
+	}
+	principals, err := c.n.ListAuthPrincipals()
+	if err != nil {
+		return nil, err
+	}
+	return &rotav1.ListPrincipalsResponse{AuthEnabled: enabled, Principals: principals}, nil
 }
 
 func (c *ControlService) DescribeCluster(ctx context.Context, req *rotav1.DescribeClusterRequest) (*rotav1.ClusterInfo, error) {

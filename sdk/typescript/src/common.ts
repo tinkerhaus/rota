@@ -25,6 +25,9 @@ export type ServiceCtor<T extends grpc.Client> = new (
   options?: Partial<grpc.ClientOptions>,
 ) => T;
 
+/** Per-call metadata accepted by SDK clients. */
+export type MetadataInit = grpc.Metadata | Record<string, string> | Array<[string, string]>;
+
 // ── proto loading ────────────────────────────────────────────────────────────
 
 let cachedProto: ProtoGrpcType | undefined;
@@ -80,6 +83,26 @@ export function toTimestamp(epochSeconds: number): Timestamp {
   const whole = Math.trunc(epochSeconds);
   const nanos = Math.round((epochSeconds - whole) * 1e9);
   return { seconds: whole, nanos };
+}
+
+/** Build call metadata, including Rota's static bearer token when set. */
+export function buildMetadata(metadata?: MetadataInit, authToken?: string): grpc.Metadata {
+  let md: grpc.Metadata;
+  if (metadata instanceof grpc.Metadata) {
+    md = metadata.clone();
+  } else {
+    md = new grpc.Metadata();
+    if (Array.isArray(metadata)) {
+      for (const [key, value] of metadata) md.add(key, value);
+    } else if (metadata) {
+      for (const [key, value] of Object.entries(metadata)) md.set(key, value);
+    }
+  }
+  if (authToken) {
+    md.set("authorization", `Bearer ${authToken}`);
+    md.set("x-rota-token", authToken);
+  }
+  return md;
 }
 
 // ── leader following ─────────────────────────────────────────────────────────
@@ -174,6 +197,8 @@ export interface LeaderClientOptions {
   baseBackoff?: number;
   maxBackoff?: number;
   credentials?: grpc.ChannelCredentials;
+  metadata?: MetadataInit;
+  authToken?: string;
 }
 
 /**
@@ -192,6 +217,7 @@ export class LeaderClient<T extends grpc.Client> {
   private readonly baseBackoff: number;
   private readonly maxBackoff: number;
   private readonly credentials: grpc.ChannelCredentials;
+  private readonly metadata: grpc.Metadata;
   private candidates: string[];
   private client: T | undefined;
 
@@ -202,6 +228,7 @@ export class LeaderClient<T extends grpc.Client> {
     this.baseBackoff = opts.baseBackoff ?? 0.1;
     this.maxBackoff = opts.maxBackoff ?? 5.0;
     this.credentials = opts.credentials ?? grpc.credentials.createInsecure();
+    this.metadata = buildMetadata(opts.metadata, opts.authToken);
     this.candidates = normalizeTargets(targets);
   }
 
@@ -247,6 +274,7 @@ export class LeaderClient<T extends grpc.Client> {
     return new Promise<Res>((resolve, reject) => {
       const options: grpc.CallOptions = {};
       if (timeout != null) options.deadline = Date.now() + timeout * 1000;
+      const metadata = this.metadata.clone();
       const fn = (client as unknown as Record<string, unknown>)[method];
       if (typeof fn !== "function") {
         reject(new Error(`unknown method: ${method}`));
@@ -255,6 +283,7 @@ export class LeaderClient<T extends grpc.Client> {
       (fn as (...a: unknown[]) => void).call(
         client,
         request,
+        metadata,
         options,
         (err: grpc.ServiceError | null, resp: Res) => {
           if (err) reject(err);

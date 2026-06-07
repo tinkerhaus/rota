@@ -374,6 +374,36 @@ class ControlStub:
                 request_serializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.SerializeToString,
                 response_deserializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.FromString,
                 _registered_method=True)
+        self.CreatePrincipal = channel.unary_unary(
+                '/rota.v1.Control/CreatePrincipal',
+                request_serializer=rota_dot_v1_dot_rota__pb2.CreatePrincipalRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.CreatePrincipalResponse.FromString,
+                _registered_method=True)
+        self.RotatePrincipalToken = channel.unary_unary(
+                '/rota.v1.Control/RotatePrincipalToken',
+                request_serializer=rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenResponse.FromString,
+                _registered_method=True)
+        self.SetPrincipalDisabled = channel.unary_unary(
+                '/rota.v1.Control/SetPrincipalDisabled',
+                request_serializer=rota_dot_v1_dot_rota__pb2.SetPrincipalDisabledRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+                _registered_method=True)
+        self.GrantPrincipal = channel.unary_unary(
+                '/rota.v1.Control/GrantPrincipal',
+                request_serializer=rota_dot_v1_dot_rota__pb2.GrantPrincipalRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+                _registered_method=True)
+        self.RevokePrincipalGrant = channel.unary_unary(
+                '/rota.v1.Control/RevokePrincipalGrant',
+                request_serializer=rota_dot_v1_dot_rota__pb2.RevokePrincipalGrantRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+                _registered_method=True)
+        self.ListPrincipals = channel.unary_unary(
+                '/rota.v1.Control/ListPrincipals',
+                request_serializer=rota_dot_v1_dot_rota__pb2.ListPrincipalsRequest.SerializeToString,
+                response_deserializer=rota_dot_v1_dot_rota__pb2.ListPrincipalsResponse.FromString,
+                _registered_method=True)
 
 
 class ControlServicer:
@@ -599,6 +629,44 @@ class ControlServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CreatePrincipal(self, request, context):
+        """Auth administration. Principals, token hashes, tags, and grants are
+        replicated state; raw tokens are returned only on create/rotate.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RotatePrincipalToken(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetPrincipalDisabled(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GrantPrincipal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RevokePrincipalGrant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListPrincipals(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -761,6 +829,36 @@ def add_ControlServicer_to_server(servicer, server):
                     servicer.RedriveDeadLetter,
                     request_deserializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.FromString,
                     response_serializer=rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.SerializeToString,
+            ),
+            'CreatePrincipal': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreatePrincipal,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.CreatePrincipalRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.CreatePrincipalResponse.SerializeToString,
+            ),
+            'RotatePrincipalToken': grpc.unary_unary_rpc_method_handler(
+                    servicer.RotatePrincipalToken,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenResponse.SerializeToString,
+            ),
+            'SetPrincipalDisabled': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetPrincipalDisabled,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.SetPrincipalDisabledRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.SerializeToString,
+            ),
+            'GrantPrincipal': grpc.unary_unary_rpc_method_handler(
+                    servicer.GrantPrincipal,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.GrantPrincipalRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.SerializeToString,
+            ),
+            'RevokePrincipalGrant': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevokePrincipalGrant,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.RevokePrincipalGrantRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.AuthOpResult.SerializeToString,
+            ),
+            'ListPrincipals': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPrincipals,
+                    request_deserializer=rota_dot_v1_dot_rota__pb2.ListPrincipalsRequest.FromString,
+                    response_serializer=rota_dot_v1_dot_rota__pb2.ListPrincipalsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1629,6 +1727,168 @@ class Control:
             '/rota.v1.Control/RedriveDeadLetter',
             rota_dot_v1_dot_rota__pb2.RedriveDeadLetterRequest.SerializeToString,
             rota_dot_v1_dot_rota__pb2.RedriveDeadLetterResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreatePrincipal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/CreatePrincipal',
+            rota_dot_v1_dot_rota__pb2.CreatePrincipalRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.CreatePrincipalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RotatePrincipalToken(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/RotatePrincipalToken',
+            rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.RotatePrincipalTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetPrincipalDisabled(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/SetPrincipalDisabled',
+            rota_dot_v1_dot_rota__pb2.SetPrincipalDisabledRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GrantPrincipal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/GrantPrincipal',
+            rota_dot_v1_dot_rota__pb2.GrantPrincipalRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevokePrincipalGrant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/RevokePrincipalGrant',
+            rota_dot_v1_dot_rota__pb2.RevokePrincipalGrantRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.AuthOpResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPrincipals(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rota.v1.Control/ListPrincipals',
+            rota_dot_v1_dot_rota__pb2.ListPrincipalsRequest.SerializeToString,
+            rota_dot_v1_dot_rota__pb2.ListPrincipalsResponse.FromString,
             options,
             channel_credentials,
             insecure,

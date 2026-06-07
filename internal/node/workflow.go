@@ -14,6 +14,7 @@ import (
 
 	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/fsm"
+	"github.com/tinkerhaus/rota/internal/observe"
 	"github.com/tinkerhaus/rota/internal/storage"
 )
 
@@ -190,6 +191,7 @@ func (n *Node) CompleteWorkflowTask(runID uint64, epoch uint32, seq uint64, pref
 	// The determinism check is MANDATORY — a nil checksum must not silently bypass
 	// it (that would let an unvalidated forward decision commit cluster-wide).
 	if prefixChecksum == nil {
+		observe.WorkflowTaskRejections.WithLabelValues("checksum_required").Inc()
 		return &fsm.WFAppendResult{Applied: false, Reason: "checksum_required"}, nil
 	}
 	want, err := historyChecksum(n.store, runID, seq)
@@ -197,10 +199,12 @@ func (n *Node) CompleteWorkflowTask(runID uint64, epoch uint32, seq uint64, pref
 		return nil, err
 	}
 	if !bytes.Equal(prefixChecksum, want) {
+		observe.WorkflowTaskRejections.WithLabelValues("non_determinism").Inc()
 		return &fsm.WFAppendResult{Applied: false, Reason: "non_determinism"}, nil
 	}
 	events, err := translateCommands(cmds, run.TenantId)
 	if err != nil {
+		observe.WorkflowTaskRejections.WithLabelValues("invalid_command").Inc()
 		return nil, err
 	}
 	return n.proposeAppend(runID, epoch, seq, events)
@@ -301,9 +305,9 @@ const WorkflowTaskRetryDelayMs uint64 = 1000
 // wfTaskResult is the disposition of one driven workflow task. Exactly one of the
 // three branches is meaningful:
 //   - drop:  a benign no-op (malformed payload, or a stale/closed run already
-//            superseded by a fresh task) — safe to consume the lease.
+//     superseded by a fresh task) — safe to consume the lease.
 //   - retry: the task could NOT be processed (a transient error, OR the decider
-//            returned an invalid command) — it must be requeued, never dropped.
+//     returned an invalid command) — it must be requeued, never dropped.
 //   - res:   the gate ran; ack on applied/stale/closed, else requeue.
 type wfTaskResult struct {
 	res   *fsm.WFAppendResult

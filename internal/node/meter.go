@@ -15,22 +15,24 @@ type laneMeter struct {
 	mu   sync.Mutex
 	pub  map[string]uint64
 	lse  map[string]uint64
-	last map[string][2]uint64 // lane -> {pub, lease} at the previous sample
+	ack  map[string]uint64
+	last map[string][3]uint64 // lane -> {pub, lease, ack} at the previous sample
 	rate map[string]LaneRate  // smoothed
 }
 
-// LaneRate is a lane's smoothed publish/lease rate (events per second).
-type LaneRate struct{ Publish, Lease float64 }
+// LaneRate is a lane's smoothed publish/lease/ack rate (events per second).
+type LaneRate struct{ Publish, Lease, Ack float64 }
 
 func newLaneMeter() *laneMeter {
 	return &laneMeter{
-		pub: map[string]uint64{}, lse: map[string]uint64{},
-		last: map[string][2]uint64{}, rate: map[string]LaneRate{},
+		pub: map[string]uint64{}, lse: map[string]uint64{}, ack: map[string]uint64{},
+		last: map[string][3]uint64{}, rate: map[string]LaneRate{},
 	}
 }
 
 func (m *laneMeter) incPublish(lane string) { m.mu.Lock(); m.pub[lane]++; m.mu.Unlock() }
 func (m *laneMeter) incLease(lane string)   { m.mu.Lock(); m.lse[lane]++; m.mu.Unlock() }
+func (m *laneMeter) incAck(lane string)     { m.mu.Lock(); m.ack[lane]++; m.mu.Unlock() }
 
 func (m *laneMeter) sample(dt float64) {
 	const a = 0.45 // EWMA smoothing
@@ -43,14 +45,19 @@ func (m *laneMeter) sample(dt float64) {
 	for lane := range m.lse {
 		seen[lane] = true
 	}
+	for lane := range m.ack {
+		seen[lane] = true
+	}
 	for lane := range seen {
-		cum := [2]uint64{m.pub[lane], m.lse[lane]}
+		cum := [3]uint64{m.pub[lane], m.lse[lane], m.ack[lane]}
 		prev := m.last[lane]
 		ip := float64(cum[0]-prev[0]) / dt
 		il := float64(cum[1]-prev[1]) / dt
+		ia := float64(cum[2]-prev[2]) / dt
 		r := m.rate[lane]
 		r.Publish = a*ip + (1-a)*r.Publish
 		r.Lease = a*il + (1-a)*r.Lease
+		r.Ack = a*ia + (1-a)*r.Ack
 		m.rate[lane] = r
 		m.last[lane] = cum
 	}

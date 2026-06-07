@@ -76,12 +76,18 @@ func (s *server) cluster(w http.ResponseWriter, r *http.Request) {
 	if !get(w, r) {
 		return
 	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ}}) {
+		return
+	}
 	resp, err := s.control.DescribeCluster(r.Context(), &rotav1.DescribeClusterRequest{})
 	writeProto(w, resp, err)
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	if !get(w, r) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ}}) {
 		return
 	}
 	resp, err := s.control.Health(r.Context(), &rotav1.HealthRequest{})
@@ -92,7 +98,11 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 	if !get(w, r) {
 		return
 	}
-	resp, err := s.control.GetStats(r.Context(), &rotav1.GetStatsRequest{Lane: r.URL.Query().Get("lane")})
+	q := r.URL.Query()
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: q.Get("lane"), Group: q.Get("group_id")}}) {
+		return
+	}
+	resp, err := s.control.GetStats(r.Context(), &rotav1.GetStatsRequest{Lane: q.Get("lane"), GroupId: q.Get("group_id")})
 	writeProto(w, resp, err)
 }
 
@@ -149,6 +159,9 @@ func (s *server) listGroups(w http.ResponseWriter, r *http.Request, lane string)
 	if !get(w, r) {
 		return
 	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
+		return
+	}
 	q := r.URL.Query()
 	resp, err := s.control.ListGroups(r.Context(), &rotav1.ListGroupsRequest{
 		Lane: lane, PageSize: parseU32(q.Get("page_size")), PageToken: q.Get("page_token"),
@@ -158,6 +171,9 @@ func (s *server) listGroups(w http.ResponseWriter, r *http.Request, lane string)
 
 func (s *server) listDLQ(w http.ResponseWriter, r *http.Request, lane string) {
 	if !get(w, r) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
 		return
 	}
 	q := r.URL.Query()
@@ -171,6 +187,9 @@ func (s *server) listLeases(w http.ResponseWriter, r *http.Request, lane string)
 	if !get(w, r) {
 		return
 	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane}}) {
+		return
+	}
 	q := r.URL.Query()
 	resp, err := s.control.ListLeases(r.Context(), &rotav1.ListLeasesRequest{
 		Lane: lane, PageSize: parseU32(q.Get("page_size")), PageToken: q.Get("page_token"),
@@ -180,6 +199,9 @@ func (s *server) listLeases(w http.ResponseWriter, r *http.Request, lane string)
 
 func (s *server) peekMessages(w http.ResponseWriter, r *http.Request, lane, group string) {
 	if !get(w, r) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_READ, Lane: lane, Group: group}}) {
 		return
 	}
 	resp, err := s.control.PeekMessages(r.Context(), &rotav1.PeekMessagesRequest{
@@ -208,6 +230,9 @@ func (s *server) redrive(w http.ResponseWriter, r *http.Request, lane string) {
 		MsgID   uint64 `json:"msg_id"`
 	}
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !s.authorize(w, r, []node.AuthCheck{{Action: rotav1.AuthAction_AUTH_CONFIGURE, Lane: lane, Group: body.GroupID}}) {
 		return
 	}
 	resp, err := s.control.RedriveDeadLetter(r.Context(), &rotav1.RedriveDeadLetterRequest{
@@ -249,4 +274,32 @@ func writeProto(w http.ResponseWriter, m proto.Message, err error) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(out)
+}
+
+func (s *server) authorize(w http.ResponseWriter, r *http.Request, checks []node.AuthCheck) bool {
+	decision, err := s.n.AuthorizeToken(httpAuthToken(r), checks)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	if !decision.Enabled || decision.Allowed {
+		return true
+	}
+	if !decision.Known {
+		http.Error(w, "missing or invalid rota auth token", http.StatusUnauthorized)
+		return false
+	}
+	http.Error(w, "rota auth token lacks permission", http.StatusForbidden)
+	return false
+}
+
+func httpAuthToken(r *http.Request) string {
+	if token := strings.TrimSpace(r.Header.Get("X-Rota-Token")); token != "" {
+		return token
+	}
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	return ""
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/raft"
 	"golang.org/x/time/rate"
 
+	rotav1 "github.com/tinkerhaus/rota/gen/rota/v1"
 	"github.com/tinkerhaus/rota/internal/fsm"
 	"github.com/tinkerhaus/rota/internal/observe"
 	"github.com/tinkerhaus/rota/internal/policy"
@@ -322,9 +323,10 @@ func (n *Node) PublishBatch(reqs []PublishReq, atomic bool) ([]fsm.PublishItemRe
 	if br == nil {
 		return nil, fmt.Errorf("publish_batch: no result")
 	}
-	for _, it := range br.Items {
-		if it.OK {
+	for i, it := range br.Items {
+		if it.OK && !it.Duplicate {
 			observe.Publishes.Inc()
+			n.meter.incPublish(reqs[i].Lane)
 		}
 	}
 	return br.Items, nil
@@ -426,9 +428,13 @@ func (n *Node) LeaseOneFiltered(lane, consumerID string, allow, deny []string) (
 }
 
 func (n *Node) Ack(leaseID uint64) error {
+	lane := n.leaseLaneForMetrics(leaseID)
 	_, err := n.apply(fsm.Command{Type: fsm.CmdAck, Ack: &fsm.AckCmd{LeaseID: leaseID}})
 	if err == nil {
 		observe.Acks.Inc()
+		if lane != "" {
+			n.meter.incAck(lane)
+		}
 	}
 	return err
 }
@@ -447,6 +453,7 @@ func (n *Node) Nack(leaseID uint64, mode fsm.NackMode, delayMs uint64, meta map[
 	}
 	if nr.DeadLettered {
 		observe.DeadLetters.Inc()
+		observe.DeadLettersByReason.WithLabelValues(deadLetterReasonForNack(mode)).Inc()
 	}
 	return nr.DeadLettered, nil
 }
@@ -460,6 +467,21 @@ func nackModeLabel(m fsm.NackMode) string {
 	default:
 		return "requeue_no_penalty"
 	}
+}
+
+func deadLetterReasonForNack(m fsm.NackMode) string {
+	if m == fsm.NackDeadLetter {
+		return "terminal_nack"
+	}
+	return "max_attempts"
+}
+
+func (n *Node) leaseLaneForMetrics(leaseID uint64) string {
+	lease := &rotav1.Lease{}
+	if ok, _ := n.store.GetProto(storage.LeaseKey(leaseID), lease); ok {
+		return lease.GetLane()
+	}
+	return ""
 }
 
 func (n *Node) Extend(leaseID, ttlMs uint64) error {

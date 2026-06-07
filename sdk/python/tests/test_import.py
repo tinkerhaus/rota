@@ -5,6 +5,7 @@ only sets up lazy state; no gRPC connection is dialed until the first call.
 """
 
 from rota import Control, DeadLetter, Message, Publisher, Requeue, Worker
+from rota._common import auth_metadata
 
 
 def test_top_level_exports():
@@ -30,6 +31,13 @@ def test_publisher_constructs_lazily():
     # Lazy: no channel dialed yet.
     assert pub._client._channel is None
     pub.close()
+
+
+def test_auth_token_metadata():
+    md = auth_metadata("secret", (("x-app", "demo"),))
+    assert ("x-app", "demo") in md
+    assert ("authorization", "Bearer secret") in md
+    assert ("x-rota-token", "secret") in md
 
 
 def test_publisher_build_spec_rejects_double_eligibility():

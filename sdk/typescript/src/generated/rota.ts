@@ -23,6 +23,11 @@ export interface ProtoGrpcType {
       ActivityCompletedAttrs: MessageTypeDefinition
       ActivityScheduledAttrs: MessageTypeDefinition
       ActivityTask: MessageTypeDefinition
+      AuthAction: EnumTypeDefinition
+      AuthGrant: MessageTypeDefinition
+      AuthOpResult: MessageTypeDefinition
+      AuthPrincipal: MessageTypeDefinition
+      AuthTokenInfo: MessageTypeDefinition
       Broker: SubtypeConstructor<typeof grpc.Client, _rota_v1_BrokerClient> & { service: _rota_v1_BrokerDefinition }
       CancelWorkflowRequest: MessageTypeDefinition
       CancelWorkflowResponse: MessageTypeDefinition
@@ -34,6 +39,8 @@ export interface ProtoGrpcType {
       Control: SubtypeConstructor<typeof grpc.Client, _rota_v1_ControlClient> & { service: _rota_v1_ControlDefinition }
       ControlFrame: MessageTypeDefinition
       ControlKind: EnumTypeDefinition
+      CreatePrincipalRequest: MessageTypeDefinition
+      CreatePrincipalResponse: MessageTypeDefinition
       CreditGrant: MessageTypeDefinition
       CronInfo: MessageTypeDefinition
       CronOpResult: MessageTypeDefinition
@@ -45,6 +52,7 @@ export interface ProtoGrpcType {
       ExtendVisibility: MessageTypeDefinition
       GetStatsRequest: MessageTypeDefinition
       GetWorkflowHistoryResponse: MessageTypeDefinition
+      GrantPrincipalRequest: MessageTypeDefinition
       GroupConfig: MessageTypeDefinition
       GroupFairness: MessageTypeDefinition
       GroupMeta: MessageTypeDefinition
@@ -72,6 +80,8 @@ export interface ProtoGrpcType {
       ListGroupsResponse: MessageTypeDefinition
       ListLeasesRequest: MessageTypeDefinition
       ListLeasesResponse: MessageTypeDefinition
+      ListPrincipalsRequest: MessageTypeDefinition
+      ListPrincipalsResponse: MessageTypeDefinition
       ListWorkflowRunsRequest: MessageTypeDefinition
       ListWorkflowRunsResponse: MessageTypeDefinition
       Message: MessageTypeDefinition
@@ -110,10 +120,14 @@ export interface ProtoGrpcType {
       RespondWorkflowTaskRequest: MessageTypeDefinition
       RespondWorkflowTaskResponse: MessageTypeDefinition
       RetryBackoff: MessageTypeDefinition
+      RevokePrincipalGrantRequest: MessageTypeDefinition
+      RotatePrincipalTokenRequest: MessageTypeDefinition
+      RotatePrincipalTokenResponse: MessageTypeDefinition
       ScheduleCronRequest: MessageTypeDefinition
       SetGroupConfigRequest: MessageTypeDefinition
       SetLaneConfigRequest: MessageTypeDefinition
       SetPolicyRequest: MessageTypeDefinition
+      SetPrincipalDisabledRequest: MessageTypeDefinition
       SignalReceivedAttrs: MessageTypeDefinition
       SignalWorkflowRequest: MessageTypeDefinition
       SignalWorkflowResponse: MessageTypeDefinition

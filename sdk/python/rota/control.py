@@ -30,6 +30,8 @@ class Control:
         max_retries: int = 5,
         channel_options: Optional[Sequence] = None,
         credentials=None,
+        metadata=None,
+        auth_token: Optional[str] = None,
     ):
         self._timeout = timeout
         self._client = LeaderClient(
@@ -38,6 +40,8 @@ class Control:
             channel_options=channel_options,
             max_retries=max_retries,
             credentials=credentials,
+            metadata=metadata,
+            auth_token=auth_token,
         )
 
     def _call(self, method: str, request):

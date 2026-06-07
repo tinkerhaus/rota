@@ -85,6 +85,15 @@ service Control {
 
   // Operator action: re-publish a dead letter onto its lane (mutating; leader-guarded).
   rpc RedriveDeadLetter(RedriveDeadLetterRequest) returns (RedriveDeadLetterResponse);
+
+  // Auth administration. Principals, token hashes, tags, and grants are
+  // replicated state; raw tokens are returned only on create/rotate.
+  rpc CreatePrincipal(CreatePrincipalRequest) returns (CreatePrincipalResponse);
+  rpc RotatePrincipalToken(RotatePrincipalTokenRequest) returns (RotatePrincipalTokenResponse);
+  rpc SetPrincipalDisabled(SetPrincipalDisabledRequest) returns (AuthOpResult);
+  rpc GrantPrincipal(GrantPrincipalRequest) returns (AuthOpResult);
+  rpc RevokePrincipalGrant(RevokePrincipalGrantRequest) returns (AuthOpResult);
+  rpc ListPrincipals(ListPrincipalsRequest) returns (ListPrincipalsResponse);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -653,6 +662,77 @@ message RedriveDeadLetterRequest {
 message RedriveDeadLetterResponse {
   bool ok = 1;                          // false => no matching DLQ row (already redriven/absent)
   uint64 new_msg_id = 2;                // the re-published message's new per-group id
+}
+
+// Auth actions are intentionally small and resource-oriented. A grant authorizes
+// one or more actions over lane/group regexes; the administrator tag bypasses
+// resource checks for break-glass and bootstrap operators.
+enum AuthAction {
+  AUTH_ACTION_UNSPECIFIED = 0;
+  AUTH_READ = 1;       // inspect cluster, lane, group, leases, DLQ, workflow state
+  AUTH_PUBLISH = 2;    // publish work onto lanes/groups
+  AUTH_CONSUME = 3;    // lease and settle work from lanes/groups
+  AUTH_COMPLETE = 4;   // resolve complete-by-token callbacks
+  AUTH_WORKFLOW = 5;   // start/signal/cancel/poll/respond workflow tasks
+  AUTH_CONFIGURE = 6;  // mutate broker policy, lane/group config, cron, singleton, DLQ
+  AUTH_ADMIN = 7;      // manage auth and bypass resource scoping
+}
+message AuthGrant {
+  string lane_pattern = 1;              // RE2 regex; empty/"*" means all lanes
+  string group_pattern = 2;             // RE2 regex; empty/"*" means all groups
+  repeated AuthAction actions = 3;
+  string note = 4;
+}
+message AuthTokenInfo {
+  string token_id = 1;                  // stable identifier for auditing; not secret
+  bytes salt = 2;                       // token hash salt, replicated
+  bytes hash = 3;                       // sha256(salt || raw_token), replicated
+  uint64 created_ms = 4;
+  uint64 rotated_ms = 5;
+}
+message AuthPrincipal {
+  string name = 1;
+  bool disabled = 2;
+  repeated string tags = 3;             // administrator | dashboard | monitoring
+  repeated AuthGrant grants = 4;
+  AuthTokenInfo token = 5;
+  uint64 created_ms = 6;
+  uint64 updated_ms = 7;
+}
+message CreatePrincipalRequest {
+  string name = 1;
+  repeated string tags = 2;
+  repeated AuthGrant grants = 3;
+}
+message CreatePrincipalResponse {
+  AuthPrincipal principal = 1;
+  string token = 2;                     // shown exactly once
+}
+message RotatePrincipalTokenRequest { string name = 1; }
+message RotatePrincipalTokenResponse {
+  AuthPrincipal principal = 1;
+  string token = 2;                     // shown exactly once
+}
+message SetPrincipalDisabledRequest {
+  string name = 1;
+  bool disabled = 2;
+}
+message GrantPrincipalRequest {
+  string name = 1;
+  AuthGrant grant = 2;
+}
+message RevokePrincipalGrantRequest {
+  string name = 1;
+  uint32 grant_index = 2;
+}
+message AuthOpResult {
+  bool ok = 1;
+  string detail = 2;
+}
+message ListPrincipalsRequest {}
+message ListPrincipalsResponse {
+  bool auth_enabled = 1;
+  repeated AuthPrincipal principals = 2;
 }
 message DescribeClusterRequest {}
 message ClusterInfo {

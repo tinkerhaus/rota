@@ -25,10 +25,12 @@ import { hostname } from "node:os";
 import * as grpc from "@grpc/grpc-js";
 
 import {
+  buildMetadata,
   extractNotLeader,
   loadProto,
   normalizeTargets,
   toDuration,
+  type MetadataInit,
   type Targets,
 } from "./common.js";
 import { NackMode } from "./generated/rota/v1/NackMode.js";
@@ -60,6 +62,8 @@ export interface WorkerOptions {
   reconnectMaxBackoff?: number;
   channelOptions?: Partial<grpc.ClientOptions>;
   credentials?: grpc.ChannelCredentials;
+  metadata?: MetadataInit;
+  authToken?: string;
 }
 
 /** A leased message handed to the handler. */
@@ -132,6 +136,7 @@ export class Worker {
   private readonly reconnectMax: number;
   private readonly channelOptions: Partial<grpc.ClientOptions>;
   private readonly credentials: grpc.ChannelCredentials;
+  private readonly metadata: grpc.Metadata;
 
   private candidates: string[];
   private client: BrokerClient | undefined;
@@ -154,6 +159,7 @@ export class Worker {
     this.reconnectMax = opts.reconnectMaxBackoff ?? 10.0;
     this.channelOptions = opts.channelOptions ?? {};
     this.credentials = opts.credentials ?? grpc.credentials.createInsecure();
+    this.metadata = buildMetadata(opts.metadata, opts.authToken);
     this.candidates = normalizeTargets(targets);
   }
 
@@ -197,7 +203,7 @@ export class Worker {
     return new Promise<SessionResult>((resolve) => {
       const client = this.dial(this.candidates[0]);
       this.client = client;
-      const stream = client.Work();
+      const stream = client.Work(this.metadata.clone());
       this.stream = stream;
 
       let settled = false;

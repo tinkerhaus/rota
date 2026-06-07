@@ -1,0 +1,74 @@
+groups:
+  - name: rota.rules
+    rules:
+      - alert: RotaTargetDown
+        expr: up{job="rota"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rota target is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }}."
+
+      - alert: RotaNoLeader
+        expr: sum by (job) (rota_node_is_leader{job="rota"}) == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rota cluster has no observed leader"
+          description: "No scraped Rota node is reporting itself as leader."
+
+      - alert: RotaNoQuorum
+        expr: min by (job) (rota_cluster_has_quorum{job="rota"}) == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rota cluster has no quorum"
+          description: "{{ $labels.instance }} does not see a current Raft leader/quorum."
+
+      - alert: RotaDeadLettersRising
+        expr: increase(rota_dead_letters_total{job="rota"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rota dead letters are rising"
+          description: "{{ $labels.instance }} has routed messages to the DLQ in the last 10 minutes."
+
+      - alert: RotaRetryPressureHigh
+        expr: rate(rota_nacks_total{job="rota",mode="retry"}[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rota retry pressure is high"
+          description: "{{ $labels.instance }} is seeing sustained retry nacks."
+
+      - alert: RotaWorkflowTaskRejected
+        expr: increase(rota_workflow_task_rejections_total{job="rota"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rota workflow task validation rejected decisions"
+          description: "Workflow task validation rejected decisions on {{ $labels.instance }} (reason={{ $labels.reason }})."
+
+      - alert: RotaLeaderRedirectsHigh
+        expr: rate(rota_leader_redirects_total{job="rota"}[5m]) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rota leader redirects are high"
+          description: "Clients are frequently hitting followers instead of the leader."
+
+      - alert: RotaPolicyFaults
+        expr: increase(rota_policy_faults_total{job="rota"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rota scheduling policy faults"
+          description: "A scheduling policy faulted and fell back to the built-in policy."

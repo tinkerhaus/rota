@@ -26,6 +26,10 @@ go run ./cmd/rota serve            # Broker+Control on 127.0.0.1:7100, metrics o
 The SDK defaults to `127.0.0.1:7100` to match that. Pass your own address (or a
 comma-separated seed list for a cluster) to any client.
 
+For token-protected clusters, pass `auth_token="..."` to `Publisher`, `Worker`,
+`Control`, `WorkflowClient`, and workflow/activity worker loops. Native gRPC
+credentials can be passed via `credentials=` for TLS/mTLS.
+
 ## Quickstart
 
 ### Publish
@@ -203,6 +207,11 @@ repo root for the buf-driven equivalent.
 ## Tests
 
 ```bash
-pip install pytest
-pytest sdk/python/tests          # import + construction smoke tests (no server)
+cd sdk/python
+. .venv/bin/activate 2>/dev/null || { python3 -m venv .venv && . .venv/bin/activate; }
+python -m pip install -r requirements-dev.txt
+python -m pytest                 # import smoke tests + broker-backed e2e when Go is available
 ```
+
+See [`../../docs/sdk-parity.md`](../../docs/sdk-parity.md) for Python/TypeScript
+feature parity and [`../../examples/`](../../examples/) for runnable examples.

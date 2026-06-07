@@ -20,14 +20,26 @@ var (
 	DeadLetters = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "rota_dead_letters_total", Help: "Messages routed to the dead-letter queue.",
 	})
+	DeadLettersByReason = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "rota_dead_letters_by_reason_total", Help: "Messages routed to the dead-letter queue by reason.",
+	}, []string{"reason"})
 	TimerFires = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "rota_timer_fires_total", Help: "Time-index entries fired, by kind.",
 	}, []string{"kind"})
 	PolicyFaults = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "rota_policy_faults_total", Help: "Policy evaluations that faulted and fell back to WFQ.",
 	})
+	LeaderRedirects = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "rota_leader_redirects_total", Help: "Requests redirected because they reached a follower.",
+	}, []string{"surface"})
+	WorkflowTaskRejections = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "rota_workflow_task_rejections_total", Help: "Workflow task responses rejected by the validation gate.",
+	}, []string{"reason"})
 )
 
 func init() {
-	prometheus.MustRegister(Publishes, Leases, Acks, Nacks, DeadLetters, TimerFires, PolicyFaults)
+	prometheus.MustRegister(
+		Publishes, Leases, Acks, Nacks, DeadLetters, DeadLettersByReason,
+		TimerFires, PolicyFaults, LeaderRedirects, WorkflowTaskRejections,
+	)
 }
