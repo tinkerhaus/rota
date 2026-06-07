@@ -25,6 +25,8 @@ import (
 type benchSuiteOptions struct {
 	profile          string
 	json             bool
+	quiet            bool
+	progress         io.Writer
 	tmpDir           string
 	keepData         bool
 	skipCluster      bool
@@ -173,8 +175,12 @@ func cmdBenchSuite(args []string) error {
 	fs.StringVar(&opts.tmpDir, "tmp-dir", "", "directory for benchmark data; a run subdirectory is created inside it")
 	fs.BoolVar(&opts.keepData, "keep-data", false, "keep benchmark data directory after the suite finishes")
 	fs.BoolVar(&opts.json, "json", false, "emit JSON")
+	fs.BoolVar(&opts.quiet, "quiet", false, "suppress progress output")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if !opts.quiet {
+		opts.progress = os.Stderr
 	}
 	report, err := runBenchSuite(opts)
 	if err != nil {
@@ -245,6 +251,8 @@ func runBenchSuite(opts benchSuiteOptions) (*benchSuiteReport, error) {
 	defer cleanup()
 
 	started := time.Now()
+	progress := opts.progress
+	benchSuiteProgress(progress, "starting profile=%s run_dir=%s", opts.profile, root)
 	report := &benchSuiteReport{
 		StartedAtMs: started.UnixMilli(),
 		Profile:     opts.profile,
@@ -260,12 +268,18 @@ func runBenchSuite(opts benchSuiteOptions) (*benchSuiteReport, error) {
 		},
 	}
 
+	stepStart := time.Now()
+	benchSuiteProgress(progress, "starting single-node broker")
 	single, err := startBenchSingleNode(filepath.Join(root, "single"))
 	if err != nil {
 		return nil, err
 	}
 	defer single.close()
+	benchSuiteProgress(progress, "single-node broker ready addr=%s elapsed=%s", single.grpcAddr, benchSuiteDuration(stepStart))
 
+	stepStart = time.Now()
+	benchSuiteProgress(progress, "running single-node throughput messages=%d groups=%d workers=%d batch=%d",
+		opts.messages, opts.groups, opts.workers, opts.batchSize)
 	throughput, err := runBench(benchOptions{
 		clientOptions: clientOptions{grpcAddr: single.grpcAddr, timeout: opts.timeout},
 		lane:          "bench-suite-single",
@@ -278,6 +292,11 @@ func runBenchSuite(opts benchSuiteOptions) (*benchSuiteReport, error) {
 	if err != nil {
 		return nil, fmt.Errorf("single-node throughput: %w", err)
 	}
+	benchSuiteProgress(progress, "single-node throughput done acked=%d total=%s rate=%.1f msg/s",
+		throughput.Acked, time.Duration(throughput.TotalMs)*time.Millisecond, throughput.EndToEndPerSec)
+
+	stepStart = time.Now()
+	benchSuiteProgress(progress, "running publish/lease latency samples=%d", opts.latencySamples)
 	latency, err := runBenchLatency(context.Background(), single.grpcAddr, benchLatencyOptions{
 		lane:         "bench-suite-latency",
 		samples:      opts.latencySamples,
@@ -288,47 +307,90 @@ func runBenchSuite(opts benchSuiteOptions) (*benchSuiteReport, error) {
 	if err != nil {
 		return nil, fmt.Errorf("single-node latency: %w", err)
 	}
+	benchSuiteProgress(progress, "latency done elapsed=%s publish_p95=%.3fms lease_p95=%.3fms",
+		benchSuiteDuration(stepStart), latency.PublishLatencyMs.P95Ms, latency.LeaseWaitMs.P95Ms)
 	report.SingleNode = &benchSuiteNodeReport{Throughput: throughput, Latency: latency}
 
 	if !opts.skipSoak {
+		stepStart = time.Now()
+		benchSuiteProgress(progress, "running retry/DLQ soak duration=%s rate=%d/s retry_every=%d deadletter_every=%d",
+			opts.soakDuration, opts.soakRate, opts.retryEvery, opts.deadletterEvery)
 		soak, err := runBenchSoak(single.grpcAddr, opts)
 		if err != nil {
 			return nil, fmt.Errorf("soak pressure: %w", err)
 		}
+		benchSuiteProgress(progress, "soak done elapsed=%s published=%d acked=%d retried=%d dead_lettered=%d errors=%d",
+			benchSuiteDuration(stepStart), soak.Published, soak.Acked, soak.Retried, soak.DeadLettered, soak.Errors)
 		report.Soak = soak
+	} else {
+		benchSuiteProgress(progress, "skipping retry/DLQ soak")
 	}
 
 	if !opts.skipWorkflow {
+		stepStart = time.Now()
+		benchSuiteProgress(progress, "running workflow storm duration=%s rate=%d/s", opts.workflowDuration, opts.workflowRate)
 		workflow, err := runBenchWorkflow(single.grpcAddr, opts)
 		if err != nil {
 			return nil, fmt.Errorf("workflow storm: %w", err)
 		}
+		benchSuiteProgress(progress, "workflow storm done elapsed=%s started=%d workflow_tasks=%d activity_tasks=%d errors=%d",
+			benchSuiteDuration(stepStart), workflow.Started, workflow.WorkflowTasks, workflow.ActivityTasks, workflow.Errors)
 		report.Workflow = workflow
+	} else {
+		benchSuiteProgress(progress, "skipping workflow storm")
 	}
 
 	if !opts.skipCluster {
+		stepStart = time.Now()
+		benchSuiteProgress(progress, "starting 3-node cluster")
 		cluster, err := startBenchCluster(filepath.Join(root, "cluster"))
 		if err != nil {
 			return nil, err
 		}
 		defer cluster.close()
+		benchSuiteProgress(progress, "3-node cluster ready elapsed=%s", benchSuiteDuration(stepStart))
+		stepStart = time.Now()
+		benchSuiteProgress(progress, "running cluster throughput and leader failover")
 		clusterReport, err := runBenchCluster(cluster, opts)
 		if err != nil {
 			return nil, err
 		}
+		benchSuiteProgress(progress, "cluster done elapsed=%s acked=%d failover=%s->%s failover_ms=%d drained_after=%d",
+			benchSuiteDuration(stepStart), clusterReport.Throughput.Acked, clusterReport.Failover.InitialLeader,
+			clusterReport.Failover.NewLeader, clusterReport.Failover.FailoverMs, clusterReport.Failover.DrainedAfterFailover)
 		report.Cluster = clusterReport
+	} else {
+		benchSuiteProgress(progress, "skipping 3-node cluster")
 	}
 
 	if !opts.skipBackup {
+		stepStart = time.Now()
+		benchSuiteProgress(progress, "running backup create/validate/restore messages=%d", opts.backupMessages)
 		backup, err := runBenchBackup(filepath.Join(root, "backup"), opts)
 		if err != nil {
 			return nil, fmt.Errorf("backup: %w", err)
 		}
+		benchSuiteProgress(progress, "backup done elapsed=%s archive_bytes=%d validation_ok=%t",
+			benchSuiteDuration(stepStart), backup.ArchiveBytes, backup.Validation != nil && backup.Validation.OK)
 		report.Backup = backup
+	} else {
+		benchSuiteProgress(progress, "skipping backup")
 	}
 
 	report.FinishedAtMs = time.Now().UnixMilli()
+	benchSuiteProgress(progress, "complete elapsed=%s", benchSuiteDuration(started))
 	return report, nil
+}
+
+func benchSuiteProgress(w io.Writer, format string, args ...interface{}) {
+	if w == nil {
+		return
+	}
+	fmt.Fprintf(w, "bench suite: "+format+"\n", args...)
+}
+
+func benchSuiteDuration(start time.Time) time.Duration {
+	return time.Since(start).Round(time.Millisecond)
 }
 
 func validateBenchSuiteOptions(opts benchSuiteOptions) error {

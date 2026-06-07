@@ -87,6 +87,45 @@ func TestWriteBenchSuiteReportJSON(t *testing.T) {
 	}
 }
 
+func TestBenchSuiteProgressOutput(t *testing.T) {
+	var progress bytes.Buffer
+	_, err := runBenchSuite(benchSuiteOptions{
+		profile:          "smoke",
+		progress:         &progress,
+		messages:         3,
+		groups:           1,
+		workers:          1,
+		batchSize:        3,
+		payloadBytes:     1,
+		latencySamples:   1,
+		soakDuration:     time.Second,
+		soakRate:         1,
+		workflowDuration: time.Second,
+		workflowRate:     1,
+		backupMessages:   1,
+		timeout:          10 * time.Second,
+		skipSoak:         true,
+		skipWorkflow:     true,
+		skipCluster:      true,
+		skipBackup:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := progress.String()
+	for _, want := range []string{
+		"bench suite: starting profile=smoke",
+		"bench suite: running single-node throughput",
+		"bench suite: running publish/lease latency",
+		"bench suite: skipping retry/DLQ soak",
+		"bench suite: complete",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("progress output missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestWriteBenchSuiteReportHuman(t *testing.T) {
 	report := &benchSuiteReport{
 		Profile: "smoke",

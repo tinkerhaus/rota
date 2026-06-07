@@ -20,6 +20,9 @@ For machine-readable output:
 go run ./cmd/rota bench suite --profile smoke --json
 ```
 
+Progress is written to stderr so JSON on stdout stays parseable. Use `--quiet`
+to suppress progress and print only the final report.
+
 The suite creates a temporary run directory and removes it when the run completes. Pass `--keep-data` to inspect the Pebble/Raft data directories afterwards, or `--tmp-dir ./bench-runs` to put run data under a known parent.
 
 ## Standard Run
