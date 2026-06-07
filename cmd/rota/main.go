@@ -100,7 +100,6 @@ func cmdServe(args []string) error {
 	var peers, grpcPeers string
 	var bootstrapAdminToken, bootstrapAdminTokenFile, bootstrapAdminEnv, bootstrapAdminPrincipal string
 	var tlsCert, tlsKey, clientCA string
-	bootstrapAdminEnv = "ROTA_BOOTSTRAP_ADMIN_TOKEN"
 	bootstrapAdminPrincipal = node.BootstrapAdminPrincipal
 	for i := 0; i < len(args)-1; i += 2 {
 		switch args[i] {
