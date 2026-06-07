@@ -714,7 +714,7 @@ func drainFailoverBacklog(n *node.Node, lane string, want int, timeout time.Dura
 
 func runBenchBackup(root string, opts benchSuiteOptions) (*benchBackupReport, error) {
 	dataDir := filepath.Join(root, "data")
-	n, err := node.Open(node.Config{DataDir: dataDir, NodeID: "backup"})
+	n, err := node.Open(node.Config{DataDir: dataDir, NodeID: "backup", RaftLogLevel: "OFF"})
 	if err != nil {
 		return nil, err
 	}
@@ -770,7 +770,7 @@ func runBenchBackup(root string, opts benchSuiteOptions) (*benchBackupReport, er
 }
 
 func startBenchSingleNode(dataDir string) (*benchNodeServer, error) {
-	n, err := node.Open(node.Config{DataDir: dataDir, NodeID: "single"})
+	n, err := node.Open(node.Config{DataDir: dataDir, NodeID: "single", RaftLogLevel: "OFF"})
 	if err != nil {
 		return nil, err
 	}
@@ -821,6 +821,7 @@ func startBenchCluster(root string) (*benchCluster, error) {
 			RaftBind:     raftAddrs[id],
 			Bootstrap:    id == "n1",
 			InitialPeers: nil,
+			RaftLogLevel: "OFF",
 			GRPCAddrs:    grpcAddrs,
 			VisibilityMs: 60_000,
 		}

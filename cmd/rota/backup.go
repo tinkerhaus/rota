@@ -89,6 +89,14 @@ type backupValidationReport struct {
 	AuthPrincipals int    `json:"auth_principals"`
 }
 
+type quietPebbleLogger struct{}
+
+func (quietPebbleLogger) Infof(string, ...interface{}) {}
+
+func (quietPebbleLogger) Fatalf(format string, args ...interface{}) {
+	panic(fmt.Sprintf(format, args...))
+}
+
 func cmdBackupValidate(args []string) error {
 	var inPath, restoreDir string
 	var force, asJSON bool
@@ -137,7 +145,7 @@ func validateBackupArchive(inPath, restoreDir string, force bool) (*backupValida
 		return nil, nil, err
 	}
 	report.Files = files
-	st, err := storage.Open(restoreDir)
+	st, err := storage.OpenWithOptions(restoreDir, &pebble.Options{Logger: quietPebbleLogger{}})
 	if err != nil {
 		cleanup()
 		return nil, nil, err

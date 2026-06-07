@@ -12,7 +12,14 @@ import (
 type Store struct{ DB *pebble.DB }
 
 func Open(dir string) (*Store, error) {
-	db, err := pebble.Open(dir, &pebble.Options{})
+	return OpenWithOptions(dir, &pebble.Options{})
+}
+
+func OpenWithOptions(dir string, opts *pebble.Options) (*Store, error) {
+	if opts == nil {
+		opts = &pebble.Options{}
+	}
+	db, err := pebble.Open(dir, opts)
 	if err != nil {
 		return nil, err
 	}
