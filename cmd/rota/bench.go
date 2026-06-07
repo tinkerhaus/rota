@@ -42,6 +42,9 @@ type benchReport struct {
 }
 
 func cmdBench(args []string) error {
+	if len(args) > 0 && args[0] == "suite" {
+		return cmdBenchSuite(args[1:])
+	}
 	opts := benchOptions{
 		lane: "bench", messages: 1000, groups: 10, workers: 4,
 		batchSize: 100, payloadBytes: 128,

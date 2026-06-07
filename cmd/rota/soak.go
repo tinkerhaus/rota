@@ -225,11 +225,13 @@ func runSoakPublisher(ctx context.Context, broker rotav1.BrokerClient, opts soak
 			group := fmt.Sprintf("g-%d", (int(n)+pubID)%opts.groups)
 			_, err := broker.Publish(ctx, &rotav1.PublishRequest{Message: &rotav1.MessageSpec{
 				Lane: lane, GroupId: group, Payload: payload,
-				Headers: map[string]string{"soak": "true", "publisher": fmt.Sprint(pubID)},
+				Headers:     map[string]string{"soak": "true", "publisher": fmt.Sprint(pubID)},
 				MaxAttempts: 3,
 			}})
 			if err != nil {
-				counters.errors.Add(1)
+				if ctx.Err() == nil {
+					counters.errors.Add(1)
+				}
 				continue
 			}
 			counters.published.Add(1)
@@ -242,6 +244,9 @@ func runSoakWorker(ctx context.Context, broker rotav1.BrokerClient, opts soakOpt
 	for ctx.Err() == nil {
 		stream, err := broker.Work(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			counters.errors.Add(1)
 			sleepOrDone(ctx, 50*time.Millisecond)
 			continue
@@ -250,7 +255,9 @@ func runSoakWorker(ctx context.Context, broker rotav1.BrokerClient, opts soakOpt
 			LeaseRequest: &rotav1.LeaseRequest{Lane: lane, Credit: 1, ConsumerId: fmt.Sprintf("soak-%d", workerID)},
 		}})
 		if err != nil {
-			counters.errors.Add(1)
+			if ctx.Err() == nil {
+				counters.errors.Add(1)
+			}
 			_ = stream.CloseSend()
 			continue
 		}
@@ -273,7 +280,9 @@ func runSoakWorker(ctx context.Context, broker rotav1.BrokerClient, opts soakOpt
 				if err := stream.Send(&rotav1.WorkClientMsg{Msg: &rotav1.WorkClientMsg_Nack{
 					Nack: &rotav1.Nack{LeaseId: lease.GetLeaseId(), Mode: rotav1.NackMode_DEAD_LETTER, FailureMeta: map[string]string{"soak": "deadletter"}},
 				}}); err != nil {
-					counters.errors.Add(1)
+					if ctx.Err() == nil {
+						counters.errors.Add(1)
+					}
 				} else {
 					counters.deadLettered.Add(1)
 				}
@@ -281,7 +290,9 @@ func runSoakWorker(ctx context.Context, broker rotav1.BrokerClient, opts soakOpt
 				if err := stream.Send(&rotav1.WorkClientMsg{Msg: &rotav1.WorkClientMsg_Nack{
 					Nack: &rotav1.Nack{LeaseId: lease.GetLeaseId(), Mode: rotav1.NackMode_RETRY},
 				}}); err != nil {
-					counters.errors.Add(1)
+					if ctx.Err() == nil {
+						counters.errors.Add(1)
+					}
 				} else {
 					counters.retried.Add(1)
 				}
@@ -289,7 +300,9 @@ func runSoakWorker(ctx context.Context, broker rotav1.BrokerClient, opts soakOpt
 				if err := stream.Send(&rotav1.WorkClientMsg{Msg: &rotav1.WorkClientMsg_Ack{
 					Ack: &rotav1.Ack{LeaseId: lease.GetLeaseId()},
 				}}); err != nil {
-					counters.errors.Add(1)
+					if ctx.Err() == nil {
+						counters.errors.Add(1)
+					}
 				} else {
 					counters.acked.Add(1)
 				}
@@ -318,7 +331,9 @@ func runSoakWorkflowStarter(ctx context.Context, workflow rotav1.WorkflowClient,
 				Input:        []byte("soak"),
 			})
 			if err != nil {
-				counters.errors.Add(1)
+				if ctx.Err() == nil {
+					counters.errors.Add(1)
+				}
 				continue
 			}
 			counters.workflowStarted.Add(1)
@@ -332,6 +347,9 @@ func runSoakWorkflowWorker(ctx context.Context, workflow rotav1.WorkflowClient, 
 	for ctx.Err() == nil {
 		task, err := workflow.PollWorkflowTask(ctx, &rotav1.PollTaskRequest{TaskType: taskType, ConsumerId: "soak-wf"})
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			counters.errors.Add(1)
 			sleepOrDone(ctx, 20*time.Millisecond)
 			continue
@@ -368,7 +386,9 @@ func runSoakWorkflowWorker(ctx context.Context, workflow rotav1.WorkflowClient, 
 			Commands: cmds,
 		})
 		if err != nil {
-			counters.errors.Add(1)
+			if ctx.Err() == nil {
+				counters.errors.Add(1)
+			}
 		}
 	}
 }
@@ -378,6 +398,9 @@ func runSoakActivityWorker(ctx context.Context, workflow rotav1.WorkflowClient, 
 	for ctx.Err() == nil {
 		task, err := workflow.PollActivityTask(ctx, &rotav1.PollTaskRequest{TaskType: activityType, ConsumerId: "soak-act"})
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			counters.errors.Add(1)
 			sleepOrDone(ctx, 20*time.Millisecond)
 			continue
@@ -391,7 +414,9 @@ func runSoakActivityWorker(ctx context.Context, workflow rotav1.WorkflowClient, 
 			RunId: task.GetRunId(), LeaseId: task.GetLeaseId(), ScheduledEventId: task.GetScheduledEventId(),
 			Success: true, Result: []byte("ok"),
 		}); err != nil {
-			counters.errors.Add(1)
+			if ctx.Err() == nil {
+				counters.errors.Add(1)
+			}
 		}
 	}
 }

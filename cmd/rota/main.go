@@ -86,7 +86,7 @@ commands:
   workflow    cancel a workflow run
   leases      list in-flight leases
   messages    peek messages in a group
-  bench       publish and drain a load-test workload
+  bench       publish and drain a load-test workload; use "bench suite" for local benchmarks
   soak        run a long-lived load/chaos exercise
   backup      create, restore, or validate an offline data-directory archive
   auth        manage replicated principals, tokens, and grants`
