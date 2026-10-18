@@ -226,3 +226,7 @@ in-group ordering, no large/blob payloads. The **workflow engine** keeps a priva
 history for deterministic replay — that history is event-sourced *internally*, never exposed as a
 consumer feed. (See [`docs/design/non-goals-reevaluation.md`](docs/design/non-goals-reevaluation.md).)
 No business/domain concepts live in the core.
+
+## License
+
+[Apache License 2.0](LICENSE)
