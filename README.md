@@ -229,4 +229,5 @@ No business/domain concepts live in the core.
 
 ## License
 
-[Apache License 2.0](LICENSE)
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, modify
+and share for non-commercial purposes (personal, learning, research). Commercial use is not permitted.
