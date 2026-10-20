@@ -178,7 +178,10 @@ go run ./cmd/rota leases force-expire --grpc 127.0.0.1:7300 --lease-id 42
 go run ./cmd/rota dlq redrive --grpc 127.0.0.1:7300 --lane orders --group tenant-A --msg-id 7
 go run ./cmd/rota bench --grpc 127.0.0.1:7300 --messages 10000 --groups 100 --workers 8
 go run ./cmd/rota soak --grpc 127.0.0.1:7300 --duration 5m --workflow-storm
+go run ./cmd/rota bench suite --profile smoke --json
 ```
+
+Benchmarking guidance lives in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 For locked-down deployments, bootstrap the first replicated administrator and
 then manage principals, token rotation, tags, and lane/group grants through the

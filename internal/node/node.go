@@ -51,6 +51,7 @@ type Config struct {
 	RaftAdvertise string // defaults to RaftBind
 	Bootstrap     bool   // this node forms the initial cluster
 	InitialPeers  []Peer // voter set for the bootstrapping node (empty ⇒ just self)
+	RaftLogLevel  string // defaults to ERROR; benchmark/test harnesses may set OFF
 
 	// GRPCAddrs maps node id -> gRPC advertise address, so a follower can tell a
 	// client the LEADER's gRPC address on a NOT_LEADER redirect. Passed to every
@@ -126,6 +127,9 @@ func Open(cfg Config) (*Node, error) {
 	rc.SnapshotInterval = 30 * time.Second
 	rc.TrailingLogs = 1024
 	rc.LogLevel = "ERROR"
+	if cfg.RaftLogLevel != "" {
+		rc.LogLevel = cfg.RaftLogLevel
+	}
 
 	snaps, err := raft.NewFileSnapshotStore(cfg.DataDir, 2, io.Discard)
 	if err != nil {
